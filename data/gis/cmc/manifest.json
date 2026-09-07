@@ -1,0 +1,297 @@
+{
+  "dataset": "CMC MASTER FOLDER",
+  "outputCrs": "EPSG:4326",
+  "public": [
+    {
+      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/Feature extraction/Road Surface/RoadSurface.shp",
+      "sourceCrs": "EPSG:5235",
+      "outputCrs": "EPSG:4326",
+      "featureCount": 9,
+      "properties": [
+        "Name",
+        "ID"
+      ],
+      "geometryTypes": [
+        "Polygon"
+      ],
+      "key": "roadSurface",
+      "file": "roadSurface.geojson"
+    },
+    {
+      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/Feature extraction/Feature set 2_fine/Boundary.shp",
+      "sourceCrs": "EPSG:5235",
+      "outputCrs": "EPSG:4326",
+      "featureCount": 65,
+      "properties": [
+        "Type",
+        "ImageName",
+        "Height",
+        "MCode",
+        "SCode",
+        "ID"
+      ],
+      "geometryTypes": [
+        "LineString"
+      ],
+      "key": "roadBoundary",
+      "file": "roadBoundary.geojson"
+    },
+    {
+      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/Feature extraction/Feature set 2_fine/RoadMarking.shp",
+      "sourceCrs": "EPSG:5235",
+      "outputCrs": "EPSG:4326",
+      "featureCount": 32,
+      "properties": [
+        "Type",
+        "ImageName",
+        "MCode",
+        "SCode",
+        "ID",
+        "Type(Strin",
+        "Type(Strin_2"
+      ],
+      "geometryTypes": [
+        "MultiPolygon",
+        "Polygon"
+      ],
+      "key": "roadMarkings",
+      "file": "roadMarkings.geojson"
+    },
+    {
+      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/Feature extraction/Feature set 2_fine/LaneLine.shp",
+      "sourceCrs": "EPSG:5235",
+      "outputCrs": "EPSG:4326",
+      "featureCount": 460,
+      "properties": [
+        "Type",
+        "ImageName",
+        "Width",
+        "MCode",
+        "SCode",
+        "ID"
+      ],
+      "geometryTypes": [
+        "LineString",
+        "MultiLineString"
+      ],
+      "key": "laneLines",
+      "file": "laneLines.geojson"
+    },
+    {
+      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/Feature extraction/Feature set 2_fine/Stopline.shp",
+      "sourceCrs": "EPSG:5235",
+      "outputCrs": "EPSG:4326",
+      "featureCount": 51,
+      "properties": [
+        "Type",
+        "ImageName",
+        "Width",
+        "MCode",
+        "SCode",
+        "ID"
+      ],
+      "geometryTypes": [
+        "LineString"
+      ],
+      "key": "stopLines",
+      "file": "stopLines.geojson"
+    },
+    {
+      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/Feature extraction/Feature set 2_fine/Crosswalk.shp",
+      "sourceCrs": "EPSG:5235",
+      "outputCrs": "EPSG:4326",
+      "featureCount": 24,
+      "properties": [
+        "Type",
+        "ImageName",
+        "MCode",
+        "SCode",
+        "ID"
+      ],
+      "geometryTypes": [
+        "MultiPolygon"
+      ],
+      "key": "crosswalks",
+      "file": "crosswalks.geojson"
+    },
+    {
+      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/GNSS Data SHP/Trees.shp",
+      "sourceCrs": "EPSG:5235",
+      "outputCrs": "EPSG:4326",
+      "featureCount": 414,
+      "properties": [
+        "ID",
+        "Elevation",
+        "Name",
+        "Scientific",
+        "Health",
+        "Height_m_",
+        "Diameter_m",
+        "Age_Years_"
+      ],
+      "geometryTypes": [
+        "Point"
+      ],
+      "key": "trees",
+      "file": "trees.geojson"
+    },
+    {
+      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/GNSS Data SHP/Bus Stops.shp",
+      "sourceCrs": "EPSG:5235",
+      "outputCrs": "EPSG:4326",
+      "featureCount": 7,
+      "properties": [
+        "ID",
+        "Elevation",
+        "Material",
+        "Condition",
+        "Length (m)",
+        "width (m)",
+        "Location",
+        "Authority"
+      ],
+      "geometryTypes": [
+        "Point"
+      ],
+      "key": "busStops",
+      "file": "busStops.geojson"
+    },
+    {
+      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/GNSS Data SHP/Sign Boards.shp",
+      "sourceCrs": "EPSG:5235",
+      "outputCrs": "EPSG:4326",
+      "featureCount": 153,
+      "properties": [
+        "ID",
+        "Elevation",
+        "Type",
+        "Condition",
+        "Material"
+      ],
+      "geometryTypes": [
+        "Point"
+      ],
+      "key": "signBoards",
+      "file": "signBoards.geojson"
+    }
+  ],
+  "internal": [
+    {
+      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/GNSS Data SHP/Light Poles.shp",
+      "sourceCrs": "EPSG:5235",
+      "outputCrs": "EPSG:4326",
+      "featureCount": 250,
+      "properties": [
+        "ID",
+        "Elevation",
+        "Authority",
+        "Condition",
+        "Material"
+      ],
+      "geometryTypes": [
+        "Point"
+      ],
+      "key": "lightPoles",
+      "file": "lightPoles.geojson"
+    },
+    {
+      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/GNSS Data SHP/Manholes.shp",
+      "sourceCrs": "EPSG:5235",
+      "outputCrs": "EPSG:4326",
+      "featureCount": 302,
+      "properties": [
+        "ID",
+        "Elevation",
+        "Diameter (",
+        "Length (cm",
+        "Width (cm)",
+        "Depth(m)",
+        "Condition",
+        "Material"
+      ],
+      "geometryTypes": [
+        "Point"
+      ],
+      "key": "manholes",
+      "file": "manholes.geojson"
+    },
+    {
+      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/GNSS Data SHP/Stormwater Drains.shp",
+      "sourceCrs": "EPSG:5235",
+      "outputCrs": "EPSG:4326",
+      "featureCount": 16,
+      "properties": [
+        "ID",
+        "Elevation",
+        "Width(cm)",
+        "Depth(m)",
+        "Condition",
+        "Material"
+      ],
+      "geometryTypes": [
+        "Point"
+      ],
+      "key": "stormwaterDrains",
+      "file": "stormwaterDrains.geojson"
+    },
+    {
+      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/GNSS Data SHP/Fire Hydrants.shp",
+      "sourceCrs": "EPSG:5235",
+      "outputCrs": "EPSG:4326",
+      "featureCount": 6,
+      "properties": [
+        "ID",
+        "Elevation",
+        "Length(cm)",
+        "Width(cm)",
+        "Material",
+        "Depth(m)",
+        "Condition"
+      ],
+      "geometryTypes": [
+        "Point"
+      ],
+      "key": "fireHydrants",
+      "file": "fireHydrants.geojson"
+    },
+    {
+      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/GNSS Data SHP/Utility Boxes.shp",
+      "sourceCrs": "EPSG:5235",
+      "outputCrs": "EPSG:4326",
+      "featureCount": 69,
+      "properties": [
+        "ID",
+        "Elevation",
+        "Type",
+        "Authority",
+        "Material",
+        "Condition"
+      ],
+      "geometryTypes": [
+        "Point"
+      ],
+      "key": "utilityBoxes",
+      "file": "utilityBoxes.geojson"
+    },
+    {
+      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/GNSS Data SHP/Sewages.shp",
+      "sourceCrs": "EPSG:5235",
+      "outputCrs": "EPSG:4326",
+      "featureCount": 472,
+      "properties": [
+        "ID",
+        "Elevation",
+        "Length(cm)",
+        "width(cm)",
+        "Depth(m)",
+        "Condition",
+        "Material"
+      ],
+      "geometryTypes": [
+        "Point"
+      ],
+      "key": "sewage",
+      "file": "sewage.geojson"
+    }
+  ]
+}

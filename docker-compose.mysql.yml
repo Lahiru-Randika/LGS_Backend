@@ -1,0 +1,17 @@
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: lgs
+      MYSQL_USER: lgs_app
+      MYSQL_PASSWORD: local_dev_password_change_me
+      MYSQL_ROOT_PASSWORD: local_root_password_change_me
+    ports:
+      - "3306:3306"
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci"]
+    volumes:
+      - lgs_mysql_data:/var/lib/mysql
+
+volumes:
+  lgs_mysql_data:
