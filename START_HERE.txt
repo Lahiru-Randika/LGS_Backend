@@ -1,0 +1,41 @@
+LGS BACKEND QUICK START
+=======================
+
+1) Open this backend folder in VS Code / terminal.
+
+2) Copy:
+   .env.example -> .env
+
+3) Put your MySQL connection URL in .env:
+   DATABASE_URL=mysql://USER:PASSWORD@HOST:3306/lgs
+
+4) Set a strong initial Superior account in .env:
+   BOOTSTRAP_SUPERIOR_EMAIL=...
+   BOOTSTRAP_SUPERIOR_PASSWORD=...
+
+5) Install packages:
+   npm install
+
+6) If your DB user can create databases:
+   npm run db:setup
+
+   If your cloud provider already created the DB:
+   npm run db:migrate
+   npm run db:seed
+
+7) Start:
+   npm run dev
+
+8) Check:
+   http://localhost:4000/health
+
+9) Frontend .env:
+   VITE_API_URL=http://localhost:4000/api/v1
+
+10) Keep frontend fetch credentials enabled:
+    credentials: 'include'
+
+11) Log in as the bootstrap Superior and run the first GIS building sync:
+    POST http://localhost:4000/api/v1/map/admin/gis/buildings/sync
+
+Read README.md and docs/SECURITY.md before production use.

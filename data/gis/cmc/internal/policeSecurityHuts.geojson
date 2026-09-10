@@ -1,0 +1,12 @@
+{
+"type": "FeatureCollection",
+"name": "policeSecurityHuts",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"features": [
+{ "type": "Feature", "properties": { "policeSecurityHutId": "2152", "type": "Police Secirity Hut", "authority": "SL Police", "material": "Metal", "condition": "Good", "elevation": "6.733" }, "geometry": { "type": "Point", "coordinates": [ 79.863673233837162, 6.90742786209716 ] } },
+{ "type": "Feature", "properties": { "policeSecurityHutId": "3091", "type": "Police Secirity Hut", "authority": "SL Police", "material": "Metal", "condition": "Good", "elevation": "7.393" }, "geometry": { "type": "Point", "coordinates": [ 79.859222687858008, 6.901049694085736 ] } },
+{ "type": "Feature", "properties": { "policeSecurityHutId": "3106", "type": "Police Secirity Hut", "authority": "SL Police", "material": "Metal", "condition": "Good", "elevation": "7.392" }, "geometry": { "type": "Point", "coordinates": [ 79.859111840477823, 6.901425975318584 ] } },
+{ "type": "Feature", "properties": { "policeSecurityHutId": "3126", "type": "Police Secirity Hut", "authority": "SL Police", "material": "Metal", "condition": "Good", "elevation": "5.761" }, "geometry": { "type": "Point", "coordinates": [ 79.858878704465113, 6.902147709229837 ] } },
+{ "type": "Feature", "properties": { "policeSecurityHutId": "5054", "type": "Police Secirity Hut", "authority": "SL Police", "material": "Metal", "condition": "Good", "elevation": "8.352" }, "geometry": { "type": "Point", "coordinates": [ 79.861383920166389, 6.905384282434218 ] } }
+]
+}

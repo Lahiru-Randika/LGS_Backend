@@ -1,0 +1,19 @@
+{
+"type": "FeatureCollection",
+"name": "pits",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"features": [
+{ "type": "Feature", "properties": { "pitId": "2184", "depthCm": "50", "lengthCm": "40", "widthCm": "30", "material": "Metal", "condition": "Good", "elevation": "7.015" }, "geometry": { "type": "Point", "coordinates": [ 79.862422014874042, 6.907094288694872 ] } },
+{ "type": "Feature", "properties": { "pitId": "2198", "depthCm": "50", "lengthCm": "40", "widthCm": "30", "material": "Metal", "condition": "Good", "elevation": "6.967" }, "geometry": { "type": "Point", "coordinates": [ 79.861825133614232, 6.907026539730204 ] } },
+{ "type": "Feature", "properties": { "pitId": "3042", "depthCm": "50", "lengthCm": "20", "widthCm": "20", "material": "Metal", "condition": "Good", "elevation": "7.364" }, "geometry": { "type": "Point", "coordinates": [ 79.859599054117908, 6.899743655107522 ] } },
+{ "type": "Feature", "properties": { "pitId": "3204", "depthCm": "30", "lengthCm": "20", "widthCm": "20", "material": "Metal", "condition": "Good", "elevation": "4.823" }, "geometry": { "type": "Point", "coordinates": [ 79.858428889360013, 6.905106661138095 ] } },
+{ "type": "Feature", "properties": { "pitId": "3255", "depthCm": "30", "lengthCm": "20", "widthCm": "20", "material": "Metal", "condition": "Good", "elevation": "5.798" }, "geometry": { "type": "Point", "coordinates": [ 79.859068854376204, 6.906047699976361 ] } },
+{ "type": "Feature", "properties": { "pitId": "3256", "depthCm": "30", "lengthCm": "20", "widthCm": "20", "material": "Metal", "condition": "Good", "elevation": "5.783" }, "geometry": { "type": "Point", "coordinates": [ 79.859073489013966, 6.906051343812505 ] } },
+{ "type": "Feature", "properties": { "pitId": "4188", "depthCm": "20", "lengthCm": "20", "widthCm": "20", "material": "Metal", "condition": "Good", "elevation": "6.774" }, "geometry": { "type": "Point", "coordinates": [ 79.860736554220054, 6.909055311549431 ] } },
+{ "type": "Feature", "properties": { "pitId": "4189", "depthCm": "20", "lengthCm": "20", "widthCm": "20", "material": "Metal", "condition": "Good", "elevation": "6.79" }, "geometry": { "type": "Point", "coordinates": [ 79.860736456777261, 6.909044822541505 ] } },
+{ "type": "Feature", "properties": { "pitId": "4355", "depthCm": "20", "lengthCm": "20", "widthCm": "20", "material": "Metal", "condition": "Good", "elevation": "7.162" }, "geometry": { "type": "Point", "coordinates": [ 79.864274422342817, 6.91085694372215 ] } },
+{ "type": "Feature", "properties": { "pitId": "5197", "depthCm": "100", "lengthCm": "20", "widthCm": "20", "material": "Metal", "condition": "Good", "elevation": "5.435" }, "geometry": { "type": "Point", "coordinates": [ 79.858785149199051, 6.905791073118702 ] } },
+{ "type": "Feature", "properties": { "pitId": "5207", "depthCm": "100", "lengthCm": "20", "widthCm": "20", "material": "Metal", "condition": "Good", "elevation": "4.951" }, "geometry": { "type": "Point", "coordinates": [ 79.858622042651618, 6.905592448177063 ] } },
+{ "type": "Feature", "properties": { "pitId": "5232", "depthCm": "100", "lengthCm": "30", "widthCm": "30", "material": "Metal", "condition": "Good", "elevation": "5.086" }, "geometry": { "type": "Point", "coordinates": [ 79.85847150059233, 6.904700961631778 ] } }
+]
+}

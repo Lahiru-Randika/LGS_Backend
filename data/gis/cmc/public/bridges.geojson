@@ -1,0 +1,10 @@
+{
+"type": "FeatureCollection",
+"name": "bridges",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"features": [
+{ "type": "Feature", "properties": { "bridgeId": "3140", "type": "Bridge", "location": "Kumarathunga Munidasa Road", "material": "Conreate", "condition": "Good", "elevation": "5.673" }, "geometry": { "type": "Point", "coordinates": [ 79.858641401263341, 6.902871659247819 ] } },
+{ "type": "Feature", "properties": { "bridgeId": "3141", "type": "Bridge", "location": "Kumarathunga Munidasa Road", "material": "Conreate", "condition": "Good", "elevation": "6.42" }, "geometry": { "type": "Point", "coordinates": [ 79.858615774567554, 6.902891864200475 ] } },
+{ "type": "Feature", "properties": { "bridgeId": "3142", "type": "Bridge", "location": "Kumarathunga Munidasa Road", "material": "Conreate", "condition": "Good", "elevation": "5.567" }, "geometry": { "type": "Point", "coordinates": [ 79.858616197350074, 6.90292601696478 ] } }
+]
+}

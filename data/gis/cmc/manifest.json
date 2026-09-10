@@ -1,297 +1,435 @@
 {
-  "dataset": "CMC MASTER FOLDER",
-  "outputCrs": "EPSG:4326",
-  "public": [
+  "version": "2026-09-09-complete",
+  "crs": "EPSG:4326",
+  "layerCount": 38,
+  "notes": [
+    "Buildings remain in the existing dedicated building layer and are not duplicated here.",
+    "CMC RGB imagery is served as imagery tiles and is not stored in this GeoJSON package.",
+    "roadBoundary.geojson is the unique union of fine + original Boundary geometry (70 lines) to maximize road-outline coverage.",
+    "Tree_remaininng is not added because it duplicates a subset of Trees.",
+    "RoadSurface_test is excluded as a test/duplicate layer.",
+    "Empty source shapefiles are excluded."
+  ],
+  "layers": [
     {
-      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/Feature extraction/Road Surface/RoadSurface.shp",
-      "sourceCrs": "EPSG:5235",
-      "outputCrs": "EPSG:4326",
-      "featureCount": 9,
-      "properties": [
-        "Name",
-        "ID"
-      ],
-      "geometryTypes": [
+      "key": "landParcels",
+      "label": "Land parcels",
+      "file": "landParcels.geojson",
+      "access": "PUBLIC",
+      "geometryType": "POLYGON",
+      "featureCount": 197,
+      "actualGeometryTypes": [
         "Polygon"
-      ],
+      ]
+    },
+    {
       "key": "roadSurface",
-      "file": "roadSurface.geojson"
+      "label": "Road surface",
+      "file": "roadSurface.geojson",
+      "access": "PUBLIC",
+      "geometryType": "POLYGON",
+      "featureCount": 9,
+      "actualGeometryTypes": [
+        "Polygon"
+      ]
     },
     {
-      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/Feature extraction/Feature set 2_fine/Boundary.shp",
-      "sourceCrs": "EPSG:5235",
-      "outputCrs": "EPSG:4326",
-      "featureCount": 65,
-      "properties": [
-        "Type",
-        "ImageName",
-        "Height",
-        "MCode",
-        "SCode",
-        "ID"
-      ],
-      "geometryTypes": [
-        "LineString"
-      ],
+      "key": "roadFeatures",
+      "label": "Road features",
+      "file": "roadFeatures.geojson",
+      "access": "PUBLIC",
+      "geometryType": "POLYGON",
+      "featureCount": 6,
+      "actualGeometryTypes": [
+        "Polygon"
+      ]
+    },
+    {
       "key": "roadBoundary",
-      "file": "roadBoundary.geojson"
+      "label": "Road boundaries",
+      "file": "roadBoundary.geojson",
+      "access": "PUBLIC",
+      "geometryType": "LINE",
+      "featureCount": 70,
+      "actualGeometryTypes": [
+        "LineString"
+      ]
     },
     {
-      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/Feature extraction/Feature set 2_fine/RoadMarking.shp",
-      "sourceCrs": "EPSG:5235",
-      "outputCrs": "EPSG:4326",
+      "key": "roadSideLines",
+      "label": "Road side lines",
+      "file": "roadSideLines.geojson",
+      "access": "PUBLIC",
+      "geometryType": "LINE",
+      "featureCount": 39,
+      "actualGeometryTypes": [
+        "LineString"
+      ]
+    },
+    {
+      "key": "roadMarkings",
+      "label": "Road markings",
+      "file": "roadMarkings.geojson",
+      "access": "PUBLIC",
+      "geometryType": "MIXED",
       "featureCount": 32,
-      "properties": [
-        "Type",
-        "ImageName",
-        "MCode",
-        "SCode",
-        "ID",
-        "Type(Strin",
-        "Type(Strin_2"
-      ],
-      "geometryTypes": [
+      "actualGeometryTypes": [
         "MultiPolygon",
         "Polygon"
-      ],
-      "key": "roadMarkings",
-      "file": "roadMarkings.geojson"
+      ]
     },
     {
-      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/Feature extraction/Feature set 2_fine/LaneLine.shp",
-      "sourceCrs": "EPSG:5235",
-      "outputCrs": "EPSG:4326",
+      "key": "laneLines",
+      "label": "Lane lines",
+      "file": "laneLines.geojson",
+      "access": "PUBLIC",
+      "geometryType": "LINE",
       "featureCount": 460,
-      "properties": [
-        "Type",
-        "ImageName",
-        "Width",
-        "MCode",
-        "SCode",
-        "ID"
-      ],
-      "geometryTypes": [
+      "actualGeometryTypes": [
         "LineString",
         "MultiLineString"
-      ],
-      "key": "laneLines",
-      "file": "laneLines.geojson"
+      ]
     },
     {
-      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/Feature extraction/Feature set 2_fine/Stopline.shp",
-      "sourceCrs": "EPSG:5235",
-      "outputCrs": "EPSG:4326",
-      "featureCount": 51,
-      "properties": [
-        "Type",
-        "ImageName",
-        "Width",
-        "MCode",
-        "SCode",
-        "ID"
-      ],
-      "geometryTypes": [
-        "LineString"
-      ],
       "key": "stopLines",
-      "file": "stopLines.geojson"
+      "label": "Stop lines",
+      "file": "stopLines.geojson",
+      "access": "PUBLIC",
+      "geometryType": "LINE",
+      "featureCount": 51,
+      "actualGeometryTypes": [
+        "LineString"
+      ]
     },
     {
-      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/Feature extraction/Feature set 2_fine/Crosswalk.shp",
-      "sourceCrs": "EPSG:5235",
-      "outputCrs": "EPSG:4326",
-      "featureCount": 24,
-      "properties": [
-        "Type",
-        "ImageName",
-        "MCode",
-        "SCode",
-        "ID"
-      ],
-      "geometryTypes": [
-        "MultiPolygon"
-      ],
       "key": "crosswalks",
-      "file": "crosswalks.geojson"
+      "label": "Crosswalks",
+      "file": "crosswalks.geojson",
+      "access": "PUBLIC",
+      "geometryType": "POLYGON",
+      "featureCount": 24,
+      "actualGeometryTypes": [
+        "MultiPolygon"
+      ]
     },
     {
-      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/GNSS Data SHP/Trees.shp",
-      "sourceCrs": "EPSG:5235",
-      "outputCrs": "EPSG:4326",
-      "featureCount": 414,
-      "properties": [
-        "ID",
-        "Elevation",
-        "Name",
-        "Scientific",
-        "Health",
-        "Height_m_",
-        "Diameter_m",
-        "Age_Years_"
-      ],
-      "geometryTypes": [
-        "Point"
-      ],
-      "key": "trees",
-      "file": "trees.geojson"
+      "key": "forbidLines",
+      "label": "Forbidden lines",
+      "file": "forbidLines.geojson",
+      "access": "PUBLIC",
+      "geometryType": "LINE",
+      "featureCount": 136,
+      "actualGeometryTypes": [
+        "LineString"
+      ]
     },
     {
-      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/GNSS Data SHP/Bus Stops.shp",
-      "sourceCrs": "EPSG:5235",
-      "outputCrs": "EPSG:4326",
-      "featureCount": 7,
-      "properties": [
-        "ID",
-        "Elevation",
-        "Material",
-        "Condition",
-        "Length (m)",
-        "width (m)",
-        "Location",
-        "Authority"
-      ],
-      "geometryTypes": [
+      "key": "planarFacilities",
+      "label": "Planar facilities",
+      "file": "planarFacilities.geojson",
+      "access": "PUBLIC",
+      "geometryType": "POLYGON",
+      "featureCount": 86,
+      "actualGeometryTypes": [
+        "Polygon"
+      ]
+    },
+    {
+      "key": "trafficSigns",
+      "label": "Traffic signs",
+      "file": "trafficSigns.geojson",
+      "access": "PUBLIC",
+      "geometryType": "POINT",
+      "featureCount": 52,
+      "actualGeometryTypes": [
+        "MultiPoint"
+      ]
+    },
+    {
+      "key": "signalLightPosts",
+      "label": "Signal light posts",
+      "file": "signalLightPosts.geojson",
+      "access": "PUBLIC",
+      "geometryType": "POINT",
+      "featureCount": 33,
+      "actualGeometryTypes": [
         "Point"
-      ],
+      ]
+    },
+    {
       "key": "busStops",
-      "file": "busStops.geojson"
+      "label": "Bus stops",
+      "file": "busStops.geojson",
+      "access": "PUBLIC",
+      "geometryType": "POINT",
+      "featureCount": 7,
+      "actualGeometryTypes": [
+        "Point"
+      ]
     },
     {
-      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/GNSS Data SHP/Sign Boards.shp",
-      "sourceCrs": "EPSG:5235",
-      "outputCrs": "EPSG:4326",
-      "featureCount": 153,
-      "properties": [
-        "ID",
-        "Elevation",
-        "Type",
-        "Condition",
-        "Material"
-      ],
-      "geometryTypes": [
+      "key": "busStopAreas",
+      "label": "Bus stop areas",
+      "file": "busStopAreas.geojson",
+      "access": "PUBLIC",
+      "geometryType": "POLYGON",
+      "featureCount": 3,
+      "actualGeometryTypes": [
+        "Polygon"
+      ]
+    },
+    {
+      "key": "roadNameBoards",
+      "label": "Road name boards",
+      "file": "roadNameBoards.geojson",
+      "access": "PUBLIC",
+      "geometryType": "POINT",
+      "featureCount": 48,
+      "actualGeometryTypes": [
         "Point"
-      ],
+      ]
+    },
+    {
       "key": "signBoards",
-      "file": "signBoards.geojson"
-    }
-  ],
-  "internal": [
-    {
-      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/GNSS Data SHP/Light Poles.shp",
-      "sourceCrs": "EPSG:5235",
-      "outputCrs": "EPSG:4326",
-      "featureCount": 250,
-      "properties": [
-        "ID",
-        "Elevation",
-        "Authority",
-        "Condition",
-        "Material"
-      ],
-      "geometryTypes": [
+      "label": "Sign boards",
+      "file": "signBoards.geojson",
+      "access": "PUBLIC",
+      "geometryType": "POINT",
+      "featureCount": 153,
+      "actualGeometryTypes": [
         "Point"
-      ],
+      ]
+    },
+    {
+      "key": "billboards",
+      "label": "Billboards / digital screens",
+      "file": "billboards.geojson",
+      "access": "PUBLIC",
+      "geometryType": "POINT",
+      "featureCount": 28,
+      "actualGeometryTypes": [
+        "Point"
+      ]
+    },
+    {
+      "key": "bridges",
+      "label": "Bridges",
+      "file": "bridges.geojson",
+      "access": "PUBLIC",
+      "geometryType": "POINT",
+      "featureCount": 3,
+      "actualGeometryTypes": [
+        "Point"
+      ]
+    },
+    {
+      "key": "benches",
+      "label": "Benches",
+      "file": "benches.geojson",
+      "access": "PUBLIC",
+      "geometryType": "POINT",
+      "featureCount": 1,
+      "actualGeometryTypes": [
+        "Point"
+      ]
+    },
+    {
+      "key": "structures",
+      "label": "Statues / structures",
+      "file": "structures.geojson",
+      "access": "PUBLIC",
+      "geometryType": "POINT",
+      "featureCount": 29,
+      "actualGeometryTypes": [
+        "Point"
+      ]
+    },
+    {
+      "key": "trees",
+      "label": "Trees",
+      "file": "trees.geojson",
+      "access": "PUBLIC",
+      "geometryType": "POINT",
+      "featureCount": 414,
+      "actualGeometryTypes": [
+        "Point"
+      ]
+    },
+    {
+      "key": "extractedTrees",
+      "label": "Extracted trees",
+      "file": "extractedTrees.geojson",
+      "access": "PUBLIC",
+      "geometryType": "POINT",
+      "featureCount": 337,
+      "actualGeometryTypes": [
+        "Point"
+      ]
+    },
+    {
+      "key": "fences",
+      "label": "Fence lines",
+      "file": "fences.geojson",
+      "access": "PUBLIC",
+      "geometryType": "LINE",
+      "featureCount": 12,
+      "actualGeometryTypes": [
+        "LineString"
+      ]
+    },
+    {
+      "key": "poles",
+      "label": "Extracted poles",
+      "file": "poles.geojson",
+      "access": "INTERNAL",
+      "geometryType": "POINT",
+      "featureCount": 164,
+      "actualGeometryTypes": [
+        "MultiPoint"
+      ]
+    },
+    {
       "key": "lightPoles",
-      "file": "lightPoles.geojson"
+      "label": "Light poles",
+      "file": "lightPoles.geojson",
+      "access": "INTERNAL",
+      "geometryType": "POINT",
+      "featureCount": 250,
+      "actualGeometryTypes": [
+        "Point"
+      ]
     },
     {
-      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/GNSS Data SHP/Manholes.shp",
-      "sourceCrs": "EPSG:5235",
-      "outputCrs": "EPSG:4326",
-      "featureCount": 302,
-      "properties": [
-        "ID",
-        "Elevation",
-        "Diameter (",
-        "Length (cm",
-        "Width (cm)",
-        "Depth(m)",
-        "Condition",
-        "Material"
-      ],
-      "geometryTypes": [
+      "key": "telephoneElectricPosts",
+      "label": "Telephone / electric posts",
+      "file": "telephoneElectricPosts.geojson",
+      "access": "INTERNAL",
+      "geometryType": "POINT",
+      "featureCount": 90,
+      "actualGeometryTypes": [
         "Point"
-      ],
+      ]
+    },
+    {
+      "key": "fenceSurveyPoints",
+      "label": "Fence survey points",
+      "file": "fenceSurveyPoints.geojson",
+      "access": "INTERNAL",
+      "geometryType": "POINT",
+      "featureCount": 83,
+      "actualGeometryTypes": [
+        "Point"
+      ]
+    },
+    {
       "key": "manholes",
-      "file": "manholes.geojson"
+      "label": "Manholes",
+      "file": "manholes.geojson",
+      "access": "INTERNAL",
+      "geometryType": "POINT",
+      "featureCount": 302,
+      "actualGeometryTypes": [
+        "Point"
+      ]
     },
     {
-      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/GNSS Data SHP/Stormwater Drains.shp",
-      "sourceCrs": "EPSG:5235",
-      "outputCrs": "EPSG:4326",
-      "featureCount": 16,
-      "properties": [
-        "ID",
-        "Elevation",
-        "Width(cm)",
-        "Depth(m)",
-        "Condition",
-        "Material"
-      ],
-      "geometryTypes": [
-        "Point"
-      ],
       "key": "stormwaterDrains",
-      "file": "stormwaterDrains.geojson"
+      "label": "Stormwater drains",
+      "file": "stormwaterDrains.geojson",
+      "access": "INTERNAL",
+      "geometryType": "POINT",
+      "featureCount": 16,
+      "actualGeometryTypes": [
+        "Point"
+      ]
     },
     {
-      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/GNSS Data SHP/Fire Hydrants.shp",
-      "sourceCrs": "EPSG:5235",
-      "outputCrs": "EPSG:4326",
-      "featureCount": 6,
-      "properties": [
-        "ID",
-        "Elevation",
-        "Length(cm)",
-        "Width(cm)",
-        "Material",
-        "Depth(m)",
-        "Condition"
-      ],
-      "geometryTypes": [
-        "Point"
-      ],
       "key": "fireHydrants",
-      "file": "fireHydrants.geojson"
+      "label": "Fire hydrants",
+      "file": "fireHydrants.geojson",
+      "access": "INTERNAL",
+      "geometryType": "POINT",
+      "featureCount": 6,
+      "actualGeometryTypes": [
+        "Point"
+      ]
     },
     {
-      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/GNSS Data SHP/Utility Boxes.shp",
-      "sourceCrs": "EPSG:5235",
-      "outputCrs": "EPSG:4326",
-      "featureCount": 69,
-      "properties": [
-        "ID",
-        "Elevation",
-        "Type",
-        "Authority",
-        "Material",
-        "Condition"
-      ],
-      "geometryTypes": [
-        "Point"
-      ],
       "key": "utilityBoxes",
-      "file": "utilityBoxes.geojson"
+      "label": "Utility boxes",
+      "file": "utilityBoxes.geojson",
+      "access": "INTERNAL",
+      "geometryType": "POINT",
+      "featureCount": 69,
+      "actualGeometryTypes": [
+        "Point"
+      ]
     },
     {
-      "source": "CMC MASTER FOLDER/CMC MASTER FOLDER/GNSS Data SHP/Sewages.shp",
-      "sourceCrs": "EPSG:5235",
-      "outputCrs": "EPSG:4326",
-      "featureCount": 472,
-      "properties": [
-        "ID",
-        "Elevation",
-        "Length(cm)",
-        "width(cm)",
-        "Depth(m)",
-        "Condition",
-        "Material"
-      ],
-      "geometryTypes": [
-        "Point"
-      ],
       "key": "sewage",
-      "file": "sewage.geojson"
+      "label": "Sewage assets",
+      "file": "sewage.geojson",
+      "access": "INTERNAL",
+      "geometryType": "POINT",
+      "featureCount": 472,
+      "actualGeometryTypes": [
+        "Point"
+      ]
+    },
+    {
+      "key": "pits",
+      "label": "Pits",
+      "file": "pits.geojson",
+      "access": "INTERNAL",
+      "geometryType": "POINT",
+      "featureCount": 12,
+      "actualGeometryTypes": [
+        "Point"
+      ]
+    },
+    {
+      "key": "waterMeters",
+      "label": "Water meters",
+      "file": "waterMeters.geojson",
+      "access": "INTERNAL",
+      "geometryType": "POINT",
+      "featureCount": 2,
+      "actualGeometryTypes": [
+        "Point"
+      ]
+    },
+    {
+      "key": "waterOutlets",
+      "label": "Water outlets",
+      "file": "waterOutlets.geojson",
+      "access": "INTERNAL",
+      "geometryType": "POINT",
+      "featureCount": 8,
+      "actualGeometryTypes": [
+        "Point"
+      ]
+    },
+    {
+      "key": "waterValves",
+      "label": "Water valves",
+      "file": "waterValves.geojson",
+      "access": "INTERNAL",
+      "geometryType": "POINT",
+      "featureCount": 30,
+      "actualGeometryTypes": [
+        "Point"
+      ]
+    },
+    {
+      "key": "policeSecurityHuts",
+      "label": "Police / security huts",
+      "file": "policeSecurityHuts.geojson",
+      "access": "INTERNAL",
+      "geometryType": "POINT",
+      "featureCount": 5,
+      "actualGeometryTypes": [
+        "Point"
+      ]
     }
   ]
 }

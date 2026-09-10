@@ -1,0 +1,9 @@
+{
+"type": "FeatureCollection",
+"name": "waterMeters",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"features": [
+{ "type": "Feature", "properties": { "waterMeterId": "1069", "lengthCm": "30", "widthCm": "30", "depthM": "0.5", "material": "Metal", "condition": "Good", "elevation": "7.185" }, "geometry": { "type": "Point", "coordinates": [ 79.863086538706852, 6.905408253578392 ] } },
+{ "type": "Feature", "properties": { "waterMeterId": "1106", "lengthCm": "30", "widthCm": "30", "depthM": "0.5", "material": "Metal", "condition": "Moderate", "elevation": "7.48" }, "geometry": { "type": "Point", "coordinates": [ 79.864160926581846, 6.906889733160436 ] } }
+]
+}

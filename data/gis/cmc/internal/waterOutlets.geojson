@@ -1,0 +1,15 @@
+{
+"type": "FeatureCollection",
+"name": "waterOutlets",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"features": [
+{ "type": "Feature", "properties": { "waterOutletId": "181", "type": "Water Outlet", "lengthCm": "30", "widthCm": "30", "depthM": "1", "material": "Metal", "condition": "Good", "elevation": "4.91" }, "geometry": { "type": "Point", "coordinates": [ 79.858410345791398, 6.911596235710441 ] } },
+{ "type": "Feature", "properties": { "waterOutletId": "1176", "type": "Water Outlet", "lengthCm": "30", "widthCm": "30", "depthM": "1", "material": "Metal", "condition": "Good", "elevation": "6.785" }, "geometry": { "type": "Point", "coordinates": [ 79.863713590870333, 6.909610999330201 ] } },
+{ "type": "Feature", "properties": { "waterOutletId": "1189", "type": "Water Outlet", "lengthCm": "30", "widthCm": "30", "depthM": "1", "material": "Metal", "condition": "Good", "elevation": "7.083" }, "geometry": { "type": "Point", "coordinates": [ 79.863989265176812, 6.910307036174203 ] } },
+{ "type": "Feature", "properties": { "waterOutletId": "2258", "type": "Wash Out", "lengthCm": "75", "widthCm": "75", "depthM": "1", "material": "Metal", "condition": "Good", "elevation": "5.632" }, "geometry": { "type": "Point", "coordinates": [ 79.860006629722463, 6.906975069624052 ] } },
+{ "type": "Feature", "properties": { "waterOutletId": "4176", "type": "Wash Out", "lengthCm": "20", "widthCm": "20", "depthM": "1", "material": "Metal", "condition": "Good", "elevation": "6.878" }, "geometry": { "type": "Point", "coordinates": [ 79.860768841104729, 6.908945512235962 ] } },
+{ "type": "Feature", "properties": { "waterOutletId": "5073", "type": "Wash Out", "lengthCm": "150", "widthCm": "150", "depthM": "1", "material": "Metal", "condition": "Good", "elevation": "7.348" }, "geometry": { "type": "Point", "coordinates": [ 79.862678779031938, 6.905412743795925 ] } },
+{ "type": "Feature", "properties": { "waterOutletId": "5074", "type": "Wash Out", "lengthCm": "30", "widthCm": "30", "depthM": "1", "material": "Metal", "condition": "Good", "elevation": "8.367" }, "geometry": { "type": "Point", "coordinates": [ 79.862774782209229, 6.905453508696463 ] } },
+{ "type": "Feature", "properties": { "waterOutletId": "5206", "type": "Wash Out", "lengthCm": "30", "widthCm": "30", "depthM": "1", "material": "Metal", "condition": "Good", "elevation": "5.083" }, "geometry": { "type": "Point", "coordinates": [ 79.858602349595813, 6.905580691725781 ] } }
+]
+}

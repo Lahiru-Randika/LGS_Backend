@@ -6,7 +6,6 @@ import { Router } from 'express'
 import { optionalAuthenticate } from '../../middleware/authenticate'
 import { asyncHandler } from '../../utils/asyncHandler'
 import { forbidden, notFound } from '../../utils/errors'
-import { ok } from '../../utils/http'
 import { routeParam } from '../../utils/routeParam'
 
 const router = Router()
@@ -15,9 +14,6 @@ router.use(optionalAuthenticate)
 
 /* =========================================================
    CMC GIS STORAGE
-
-   The GeoJSON files live in the Express project, not in
-   the React public folder.
 ========================================================= */
 
 const CMC_GIS_ROOT = path.resolve(
@@ -47,19 +43,20 @@ type CmcLayerConfig = {
 
 /* =========================================================
    LAYER CATALOG
-
-   PUBLIC:
-   Safe map-display layers available to citizens/public users.
-
-   INTERNAL:
-   Municipal infrastructure layers. The user must have the
-   existing map.internal permission.
 ========================================================= */
 
 const CMC_LAYERS: Record<string, CmcLayerConfig> = {
   /* -------------------------------------------------------
      PUBLIC
   -------------------------------------------------------- */
+
+  landParcels: {
+    key: 'landParcels',
+    label: 'Land parcels',
+    file: 'landParcels.geojson',
+    access: 'PUBLIC',
+    geometryType: 'POLYGON',
+  },
 
   roadSurface: {
     key: 'roadSurface',
@@ -69,10 +66,26 @@ const CMC_LAYERS: Record<string, CmcLayerConfig> = {
     geometryType: 'POLYGON',
   },
 
+  roadFeatures: {
+    key: 'roadFeatures',
+    label: 'Road features',
+    file: 'roadFeatures.geojson',
+    access: 'PUBLIC',
+    geometryType: 'POLYGON',
+  },
+
   roadBoundary: {
     key: 'roadBoundary',
     label: 'Road boundaries',
     file: 'roadBoundary.geojson',
+    access: 'PUBLIC',
+    geometryType: 'LINE',
+  },
+
+  roadSideLines: {
+    key: 'roadSideLines',
+    label: 'Road side lines',
+    file: 'roadSideLines.geojson',
     access: 'PUBLIC',
     geometryType: 'LINE',
   },
@@ -109,10 +122,34 @@ const CMC_LAYERS: Record<string, CmcLayerConfig> = {
     geometryType: 'POLYGON',
   },
 
-  trees: {
-    key: 'trees',
-    label: 'Trees',
-    file: 'trees.geojson',
+  forbidLines: {
+    key: 'forbidLines',
+    label: 'Forbidden lines',
+    file: 'forbidLines.geojson',
+    access: 'PUBLIC',
+    geometryType: 'LINE',
+  },
+
+  planarFacilities: {
+    key: 'planarFacilities',
+    label: 'Planar facilities',
+    file: 'planarFacilities.geojson',
+    access: 'PUBLIC',
+    geometryType: 'POLYGON',
+  },
+
+  trafficSigns: {
+    key: 'trafficSigns',
+    label: 'Traffic signs',
+    file: 'trafficSigns.geojson',
+    access: 'PUBLIC',
+    geometryType: 'POINT',
+  },
+
+  signalLightPosts: {
+    key: 'signalLightPosts',
+    label: 'Signal light posts',
+    file: 'signalLightPosts.geojson',
     access: 'PUBLIC',
     geometryType: 'POINT',
   },
@@ -125,6 +162,22 @@ const CMC_LAYERS: Record<string, CmcLayerConfig> = {
     geometryType: 'POINT',
   },
 
+  busStopAreas: {
+    key: 'busStopAreas',
+    label: 'Bus stop areas',
+    file: 'busStopAreas.geojson',
+    access: 'PUBLIC',
+    geometryType: 'POLYGON',
+  },
+
+  roadNameBoards: {
+    key: 'roadNameBoards',
+    label: 'Road name boards',
+    file: 'roadNameBoards.geojson',
+    access: 'PUBLIC',
+    geometryType: 'POINT',
+  },
+
   signBoards: {
     key: 'signBoards',
     label: 'Sign boards',
@@ -133,14 +186,94 @@ const CMC_LAYERS: Record<string, CmcLayerConfig> = {
     geometryType: 'POINT',
   },
 
+  billboards: {
+    key: 'billboards',
+    label: 'Billboards / digital screens',
+    file: 'billboards.geojson',
+    access: 'PUBLIC',
+    geometryType: 'POINT',
+  },
+
+  bridges: {
+    key: 'bridges',
+    label: 'Bridges',
+    file: 'bridges.geojson',
+    access: 'PUBLIC',
+    geometryType: 'POINT',
+  },
+
+  benches: {
+    key: 'benches',
+    label: 'Benches',
+    file: 'benches.geojson',
+    access: 'PUBLIC',
+    geometryType: 'POINT',
+  },
+
+  structures: {
+    key: 'structures',
+    label: 'Statues / structures',
+    file: 'structures.geojson',
+    access: 'PUBLIC',
+    geometryType: 'POINT',
+  },
+
+  trees: {
+    key: 'trees',
+    label: 'Trees',
+    file: 'trees.geojson',
+    access: 'PUBLIC',
+    geometryType: 'POINT',
+  },
+
+  extractedTrees: {
+    key: 'extractedTrees',
+    label: 'Extracted trees',
+    file: 'extractedTrees.geojson',
+    access: 'PUBLIC',
+    geometryType: 'POINT',
+  },
+
+  fences: {
+    key: 'fences',
+    label: 'Fence lines',
+    file: 'fences.geojson',
+    access: 'PUBLIC',
+    geometryType: 'LINE',
+  },
+
   /* -------------------------------------------------------
      INTERNAL MUNICIPAL ASSETS
   -------------------------------------------------------- */
+
+  poles: {
+    key: 'poles',
+    label: 'Extracted poles',
+    file: 'poles.geojson',
+    access: 'INTERNAL',
+    geometryType: 'POINT',
+  },
 
   lightPoles: {
     key: 'lightPoles',
     label: 'Light poles',
     file: 'lightPoles.geojson',
+    access: 'INTERNAL',
+    geometryType: 'POINT',
+  },
+
+  telephoneElectricPosts: {
+    key: 'telephoneElectricPosts',
+    label: 'Telephone / electric posts',
+    file: 'telephoneElectricPosts.geojson',
+    access: 'INTERNAL',
+    geometryType: 'POINT',
+  },
+
+  fenceSurveyPoints: {
+    key: 'fenceSurveyPoints',
+    label: 'Fence survey points',
+    file: 'fenceSurveyPoints.geojson',
     access: 'INTERNAL',
     geometryType: 'POINT',
   },
@@ -184,6 +317,46 @@ const CMC_LAYERS: Record<string, CmcLayerConfig> = {
     access: 'INTERNAL',
     geometryType: 'POINT',
   },
+
+  pits: {
+    key: 'pits',
+    label: 'Pits',
+    file: 'pits.geojson',
+    access: 'INTERNAL',
+    geometryType: 'POINT',
+  },
+
+  waterMeters: {
+    key: 'waterMeters',
+    label: 'Water meters',
+    file: 'waterMeters.geojson',
+    access: 'INTERNAL',
+    geometryType: 'POINT',
+  },
+
+  waterOutlets: {
+    key: 'waterOutlets',
+    label: 'Water outlets',
+    file: 'waterOutlets.geojson',
+    access: 'INTERNAL',
+    geometryType: 'POINT',
+  },
+
+  waterValves: {
+    key: 'waterValves',
+    label: 'Water valves',
+    file: 'waterValves.geojson',
+    access: 'INTERNAL',
+    geometryType: 'POINT',
+  },
+
+  policeSecurityHuts: {
+    key: 'policeSecurityHuts',
+    label: 'Police / security huts',
+    file: 'policeSecurityHuts.geojson',
+    access: 'INTERNAL',
+    geometryType: 'POINT',
+  },
 }
 
 function canReadLayer(
@@ -206,8 +379,6 @@ function canReadLayer(
 
 /* =========================================================
    GET AVAILABLE CMC LAYERS
-
-   GET /api/v1/map/cmc/layers
 ========================================================= */
 
 router.get(
@@ -248,20 +419,19 @@ router.get(
             }),
           )
 
-      return ok(
-        res,
-        {
+      return res
+        .status(
+          200,
+        )
+        .json({
           layers,
-        },
-      )
+        })
     },
   ),
 )
 
 /* =========================================================
    GET ONE GEOJSON LAYER
-
-   GET /api/v1/map/cmc/layers/:key
 ========================================================= */
 
 router.get(
@@ -271,12 +441,6 @@ router.get(
       req,
       res,
     ) => {
-      /*
-        FIX:
-        Express route params may be typed as string | string[].
-
-        Resolve the key once before using it as an object index.
-      */
       const key =
         routeParam(
           req.params.key,
@@ -345,11 +509,6 @@ router.get(
         throw error
       }
 
-      /*
-        Public map data may be cached.
-        Internal infrastructure data should not be stored in a
-        shared/public browser cache.
-      */
       if (
         config.access ===
         'PUBLIC'
