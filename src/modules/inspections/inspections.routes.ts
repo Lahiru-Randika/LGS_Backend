@@ -109,6 +109,7 @@ type InspectionRow = RowDataPacket & {
   request_status: string
   start_latitude: number | null
   start_longitude: number | null
+  checked_in_at: Date | string | null
 }
 
 async function findRequest(code: string) {
@@ -379,6 +380,7 @@ router.get(
           i.completed_at AS completedAt,
           i.start_latitude AS startLatitude,
           i.start_longitude AS startLongitude,
+          i.checked_in_at AS checkedInAt,
           i.summary,
           u.public_id AS officerId,
           u.display_name AS officerName,
@@ -453,6 +455,7 @@ router.patch(
           i.status,
           i.start_latitude,
           i.start_longitude,
+          i.checked_in_at,
           sr.request_code,
           sr.created_by_user_id,
           sr.status AS request_status
@@ -490,6 +493,14 @@ router.patch(
       input.longitude !== undefined && input.longitude !== null
 
     const hasCheckInLocation = latitudeProvided && longitudeProvided
+
+    /*
+      Only the first successful GPS check-in creates the admin/superior
+      notification. Repeated clicks may refresh the stored coordinates,
+      but they do not spam notifications.
+    */
+    const firstCheckIn =
+      hasCheckInLocation && inspection.checked_in_at == null
 
     const requestedStatus = input.status
     const statusChanged =
@@ -560,10 +571,10 @@ router.patch(
 
     await withTransaction(async (connection) => {
       /*
-        start_latitude / start_longitude are now used as the
-        officer's most recent site check-in coordinates.
-
-        No schema change is required for this version.
+        start_latitude / start_longitude keep the officer's most
+        recent check-in coordinates. checked_in_at records the first
+        successful site arrival time and is intentionally not replaced
+        by later repeat check-ins.
       */
       await connection.execute(
         `
@@ -581,6 +592,12 @@ router.patch(
               CASE
                 WHEN ? THEN ?
                 ELSE start_longitude
+              END,
+
+            checked_in_at =
+              CASE
+                WHEN ? THEN COALESCE(checked_in_at, UTC_TIMESTAMP())
+                ELSE checked_in_at
               END,
 
             started_at =
@@ -609,6 +626,8 @@ router.patch(
 
           hasCheckInLocation,
           hasCheckInLocation ? input.longitude! : null,
+
+          firstCheckIn,
 
           starting,
 
@@ -688,8 +707,7 @@ router.patch(
       }
 
       /*
-        Notify the citizen for meaningful workflow changes.
-        Do not send a notification every time the worker checks in.
+        Citizen notifications remain tied to meaningful workflow changes.
       */
       if (starting || completing) {
         await createNotification(
@@ -711,6 +729,46 @@ router.patch(
         )
       }
 
+      /*
+        The FIRST GPS check-in is a municipal field-activity event.
+        Notify every active GOV_ADMIN and SUPERIOR so it appears in
+        their existing notification feed/bell.
+      */
+      if (firstCheckIn) {
+        const [recipientRows] = await connection.execute<
+          (RowDataPacket & {
+            id: number
+            display_name: string
+          })[]
+        >(
+          `
+            SELECT DISTINCT
+              u.id,
+              u.display_name
+            FROM users u
+            JOIN roles r
+              ON r.id = u.role_id
+            WHERE r.code IN ('GOV_ADMIN', 'SUPERIOR')
+              AND u.status = 'ACTIVE'
+              AND u.deleted_at IS NULL
+          `,
+        )
+
+        for (const recipient of recipientRows) {
+          await createNotification(
+            {
+              userId: recipient.id,
+              type: 'INSPECTION_CHECKED_IN',
+              title: 'Officer checked in at site',
+              body: `The assigned field officer checked in for ${inspection.request_code}.`,
+              entityType: 'SERVICE_REQUEST',
+              entityId: inspection.request_code,
+            },
+            connection,
+          )
+        }
+      }
+
       const auditAction = hasCheckInLocation
         ? statusChanged
           ? `INSPECTION_${requestedStatus}_WITH_CHECK_IN`
@@ -729,6 +787,7 @@ router.patch(
             status: inspection.status,
             latitude: inspection.start_latitude,
             longitude: inspection.start_longitude,
+            checkedInAt: inspection.checked_in_at,
           },
           afterData: {
             status: requestedStatus ?? inspection.status,
@@ -736,6 +795,7 @@ router.patch(
               ? {
                   latitude: input.latitude,
                   longitude: input.longitude,
+                  firstCheckIn,
                 }
               : {}),
             ...(input.summary !== undefined
@@ -756,6 +816,7 @@ router.patch(
       updated: true,
       status: requestedStatus ?? inspection.status,
       checkedIn: hasCheckInLocation,
+      firstCheckIn,
       ...(hasCheckInLocation
         ? {
             latitude: input.latitude,
