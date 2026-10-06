@@ -16,7 +16,7 @@ const envSchema = z.object({
   FRONTEND_ORIGINS: z.string().default('http://localhost:5173'),
   TRUST_PROXY: z.coerce.number().int().min(0).max(2).default(1),
   SESSION_COOKIE_NAME: z.string().min(1).default('lgs_session'),
-  SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(168).default(8),
+  SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(168).default(168),
   SESSION_COOKIE_SECURE: boolFromString,
   LOGIN_MAX_ATTEMPTS: z.coerce.number().int().min(3).max(20).default(5),
   LOGIN_LOCK_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),

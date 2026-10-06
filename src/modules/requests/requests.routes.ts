@@ -15,6 +15,7 @@ import { requirePermission } from '../../middleware/authorize'
 import { persistUploads, removePersistedUploads, upload } from '../../middleware/upload'
 import { writeAudit } from '../../services/audit.service'
 import {
+  createNotification,
   notifyRequestAssignment,
   notifyRequestCreated,
   notifyRequestStatusChanged,
@@ -575,19 +576,799 @@ router.post('/:code/attachments', upload.array('files', env.MAX_UPLOAD_FILES), a
   }
 }))
 
-router.get('/:code/attachments/:attachmentId/download', asyncHandler(async (req, res) => {
-  const current = await getVisibleRequest(routeParam(req.params.code, 'code'), req.authUser!)
-  if (!current) throw notFound('Request not found.')
-  const [rows] = await pool.execute<(RowDataPacket & { storage_key: string; original_filename: string; visibility: string })[]>(
-    'SELECT storage_key, original_filename, visibility FROM request_attachments WHERE public_id = ? AND request_id = ? AND deleted_at IS NULL LIMIT 1',
-    [req.params.attachmentId, current.id],
-  )
-  const attachment = rows[0]
-  if (!attachment || (req.authUser!.role === 'CITIZEN' && attachment.visibility !== 'CITIZEN_VISIBLE')) throw notFound('Attachment not found.')
-  const fullPath = path.resolve(env.UPLOAD_DIR, attachment.storage_key)
-  await fs.access(fullPath)
-  return res.download(fullPath, attachment.original_filename)
-}))
+router.get(
+  '/:code/attachments/:attachmentId/download',
+  asyncHandler(async (req, res) => {
+    const current =
+      await getVisibleRequest(
+        routeParam(
+          req.params.code,
+          'code',
+        ),
+        req.authUser!,
+      )
+
+    if (!current) {
+      throw notFound(
+        'Request not found.',
+      )
+    }
+
+    const attachmentId =
+      routeParam(
+        req.params.attachmentId,
+        'attachmentId',
+      )
+
+    const [rows] =
+      await pool.execute<
+        (RowDataPacket & {
+          storage_key: string
+          original_filename: string
+          mime_type: string
+          visibility: string
+        })[]
+      >(
+        `
+          SELECT
+            storage_key,
+            original_filename,
+            mime_type,
+            visibility
+          FROM request_attachments
+          WHERE public_id = ?
+            AND request_id = ?
+            AND deleted_at IS NULL
+          LIMIT 1
+        `,
+        [
+          attachmentId,
+          current.id,
+        ],
+      )
+
+    const attachment =
+      rows[0]
+
+    if (
+      !attachment ||
+      (
+        req.authUser!.role ===
+          'CITIZEN' &&
+        attachment.visibility !==
+          'CITIZEN_VISIBLE'
+      )
+    ) {
+      throw notFound(
+        'Attachment not found.',
+      )
+    }
+
+    /*
+     * Resolve only inside UPLOAD_DIR.
+     */
+    const uploadRoot =
+      path.resolve(
+        env.UPLOAD_DIR,
+      )
+
+    const fullPath =
+      path.resolve(
+        uploadRoot,
+        attachment.storage_key,
+      )
+
+    if (
+      !fullPath.startsWith(
+        `${uploadRoot}${path.sep}`,
+      )
+    ) {
+      throw notFound(
+        'Attachment not found.',
+      )
+    }
+
+    try {
+      await fs.access(fullPath)
+    } catch {
+      throw notFound(
+        'The attachment file is no longer available.',
+      )
+    }
+
+    /*
+     * IMPORTANT:
+     *
+     * Inline allows PNG/JPEG/PDF to open
+     * directly in the browser.
+     *
+     * We still protect the route using the
+     * authenticated request visibility check.
+     */
+    res.setHeader(
+      'Content-Type',
+      attachment.mime_type ||
+        'application/octet-stream',
+    )
+
+    const safeFilename =
+      attachment.original_filename
+        .replace(/[\r\n"]/g, '')
+        .slice(0, 255)
+
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="${safeFilename}"`,
+    )
+
+    res.setHeader(
+      'Cache-Control',
+      'private, max-age=300',
+    )
+
+    return res.sendFile(
+      fullPath,
+    )
+  }),
+)
+
+router.post(
+  '/:code/field-completion',
+  upload.array(
+    'files',
+    env.MAX_UPLOAD_FILES,
+  ),
+  asyncHandler(async (req, res) => {
+    if (
+      req.authUser!.role !== 'GOV_WORKER'
+    ) {
+      throw forbidden(
+        'Only the assigned field officer can submit field completion.',
+      )
+    }
+
+    const input = z
+      .object({
+        summary: z
+          .string()
+          .trim()
+          .min(1)
+          .max(5000),
+
+        actionTaken: z
+          .string()
+          .trim()
+          .max(3000)
+          .optional(),
+
+        recommendation: z
+          .string()
+          .trim()
+          .max(3000)
+          .optional(),
+      })
+      .parse(req.body)
+
+    const current =
+      await getVisibleRequest(
+        routeParam(
+          req.params.code,
+          'code',
+        ),
+        req.authUser!,
+      )
+
+    if (!current) {
+      throw notFound(
+        'Request not found.',
+      )
+    }
+
+    if (
+      current.assigned_to_user_id !==
+      req.authUser!.id
+    ) {
+      throw forbidden(
+        'This request is not assigned to you.',
+      )
+    }
+
+    if (
+      [
+        'RESOLVED',
+        'CLOSED',
+        'REJECTED',
+        'CANCELLED',
+        'DUPLICATE',
+      ].includes(current.status)
+    ) {
+      throw unprocessable(
+        'This request can no longer be completed.',
+      )
+    }
+
+    const [inspectionRows] =
+      await pool.execute<
+        (RowDataPacket & {
+          id: number
+          public_id: string
+          status: string
+        })[]
+      >(
+        `
+          SELECT
+            id,
+            public_id,
+            status
+          FROM inspections
+          WHERE request_id = ?
+          ORDER BY created_at DESC
+          LIMIT 1
+        `,
+        [current.id],
+      )
+
+    const inspection =
+      inspectionRows[0]
+
+    if (!inspection) {
+      throw unprocessable(
+        'Start an inspection before completing field work.',
+      )
+    }
+
+    if (
+      inspection.status !==
+      'IN_PROGRESS'
+    ) {
+      throw unprocessable(
+        'Only an inspection currently in progress can be completed.',
+      )
+    }
+
+    const saved =
+      await persistUploads(
+        (
+          req.files as
+            | Express.Multer.File[]
+            | undefined
+        ) ?? [],
+      )
+
+    try {
+      await withTransaction(
+        async (connection) => {
+          // Serialize completion against reassignment/resolution/status changes.
+          const [lockedRequests] = await connection.execute<
+            (RowDataPacket & { status: string; assigned_to_user_id: number | null })[]
+          >(
+            `SELECT status, assigned_to_user_id
+               FROM service_requests
+              WHERE id = ? AND deleted_at IS NULL
+              FOR UPDATE`,
+            [current.id],
+          )
+          const lockedRequest = lockedRequests[0]
+          if (!lockedRequest) throw notFound('Request not found.')
+          if (lockedRequest.assigned_to_user_id !== req.authUser!.id) {
+            throw conflict('This request was reassigned. Refresh and try again.')
+          }
+          if (['RESOLVED','CLOSED','REJECTED','CANCELLED','DUPLICATE'].includes(lockedRequest.status)) {
+            throw conflict('This request changed while you were working. Refresh and try again.')
+          }
+
+          const [lockedInspections] = await connection.execute<
+            (RowDataPacket & { status: string })[]
+          >(
+            `SELECT status FROM inspections WHERE id = ? FOR UPDATE`,
+            [inspection.id],
+          )
+          if (lockedInspections[0]?.status !== 'IN_PROGRESS') {
+            throw conflict('This inspection has already changed. Refresh and try again.')
+          }
+
+          const [inspectionResult] = await connection.execute<ResultSetHeader>(
+            `UPDATE inspections
+                SET status = 'COMPLETED', summary = ?, completed_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP()
+              WHERE id = ? AND status = 'IN_PROGRESS'`,
+            [input.summary, inspection.id],
+          )
+          if (inspectionResult.affectedRows !== 1) {
+            throw conflict('This inspection has already changed. Refresh and try again.')
+          }
+
+          // Keep request open for administrator review.
+          await connection.execute(
+            `UPDATE service_requests
+                SET status = 'IN_PROGRESS', version = version + 1, updated_at = UTC_TIMESTAMP()
+              WHERE id = ?`,
+            [current.id],
+          )
+
+          /*
+           * Internal field report.
+           */
+          const reportParts = [
+            `FIELD INSPECTION COMPLETION`,
+            '',
+            `Summary:`,
+            input.summary,
+          ]
+
+          if (
+            input.actionTaken
+          ) {
+            reportParts.push(
+              '',
+              'Action taken:',
+              input.actionTaken,
+            )
+          }
+
+          if (
+            input.recommendation
+          ) {
+            reportParts.push(
+              '',
+              'Recommendation:',
+              input.recommendation,
+            )
+          }
+
+          await connection.execute(
+            `
+              INSERT INTO request_notes (
+                request_id,
+                author_user_id,
+                body,
+                visibility,
+                created_at
+              )
+              VALUES (?, ?, ?, 'INTERNAL', UTC_TIMESTAMP())
+            `,
+            [
+              current.id,
+              req.authUser!.id,
+              reportParts.join('\n'),
+            ],
+          )
+
+          /*
+           * Save completion evidence.
+           */
+          for (
+            const file of saved
+          ) {
+            await connection.execute(
+              `
+                INSERT INTO request_attachments (
+                  public_id,
+                  request_id,
+                  uploaded_by_user_id,
+                  category,
+                  storage_provider,
+                  storage_key,
+                  original_filename,
+                  mime_type,
+                  file_size,
+                  sha256,
+                  visibility,
+                  created_at
+                )
+                VALUES (
+                  ?, ?, ?,
+                  'RESOLUTION_EVIDENCE',
+                  'LOCAL',
+                  ?, ?, ?, ?, ?,
+                  'INTERNAL',
+                  UTC_TIMESTAMP()
+                )
+              `,
+              [
+                crypto.randomUUID(),
+                current.id,
+                req.authUser!.id,
+                file.storageKey,
+                file.originalFilename,
+                file.mimeType,
+                file.fileSize,
+                file.sha256,
+              ],
+            )
+          }
+
+          /*
+           * Timeline.
+           */
+          await connection.execute(
+            `
+              INSERT INTO request_status_history (
+                request_id,
+                from_status,
+                to_status,
+                label,
+                note,
+                changed_by_user_id,
+                created_at
+              )
+              VALUES (
+                ?,
+                ?,
+                'IN_PROGRESS',
+                'Field work completed',
+                ?,
+                ?,
+                UTC_TIMESTAMP()
+              )
+            `,
+            [
+              current.id,
+              current.status,
+              input.summary,
+              req.authUser!.id,
+            ],
+          )
+
+          /*
+           * Notify all active admins.
+           */
+          const [admins] =
+            await connection.execute<
+              (RowDataPacket & {
+                id: number
+              })[]
+            >(
+              `
+                SELECT DISTINCT u.id
+                FROM users u
+                JOIN roles r
+                  ON r.id = u.role_id
+                WHERE r.code = 'GOV_ADMIN'
+                  AND u.status = 'ACTIVE'
+                  AND u.deleted_at IS NULL
+              `,
+            )
+
+          for (
+            const admin of admins
+          ) {
+            await createNotification(
+              {
+                userId:
+                  admin.id,
+
+                type:
+                  'FIELD_WORK_COMPLETED',
+
+                title:
+                  'Field work completed',
+
+                body:
+                  `The field officer has completed work for ${current.request_code}. Review the field report and finish the case.`,
+
+                entityType:
+                  'SERVICE_REQUEST',
+
+                entityId:
+                  current.request_code,
+
+                tone:
+                  'INFO',
+              },
+              connection,
+            )
+          }
+
+          await writeAudit(
+            {
+              actorUserId:
+                req.authUser!.id,
+
+              action:
+                'FIELD_WORK_COMPLETED',
+
+              entityType:
+                'SERVICE_REQUEST',
+
+              entityId:
+                current.request_code,
+
+              afterData: {
+                summary:
+                  input.summary,
+
+                actionTaken:
+                  input.actionTaken ??
+                  null,
+
+                recommendation:
+                  input.recommendation ??
+                  null,
+
+                attachmentCount:
+                  saved.length,
+              },
+
+              ipAddress:
+                req.ip,
+
+              userAgent:
+                req.get(
+                  'user-agent',
+                ),
+
+              requestId:
+                req.requestId,
+            },
+            connection,
+          )
+        },
+      )
+
+      return ok(res, {
+        completed: true,
+        status: 'IN_PROGRESS',
+      })
+    } catch (error) {
+      await removePersistedUploads(
+        saved,
+      )
+
+      throw error
+    }
+  }),
+)
+
+router.post(
+  '/:code/resolve',
+  asyncHandler(async (req, res) => {
+    if (
+      req.authUser!.role !==
+      'GOV_ADMIN'
+    ) {
+      throw forbidden(
+        'Only a government administrator can finish this case.',
+      )
+    }
+
+    const input = z
+      .object({
+        report: z
+          .string()
+          .trim()
+          .min(1)
+          .max(5000),
+      })
+      .parse(req.body)
+
+    const current =
+      await getVisibleRequest(
+        routeParam(
+          req.params.code,
+          'code',
+        ),
+        req.authUser!,
+      )
+
+    if (!current) {
+      throw notFound(
+        'Request not found.',
+      )
+    }
+
+    if (
+      [
+        'RESOLVED',
+        'CLOSED',
+        'REJECTED',
+        'CANCELLED',
+        'DUPLICATE',
+      ].includes(current.status)
+    ) {
+      throw unprocessable(
+        'This request has already reached a final state.',
+      )
+    }
+
+    const [inspectionRows] =
+      await pool.execute<
+        (RowDataPacket & {
+          status: string
+        })[]
+      >(
+        `
+          SELECT status
+          FROM inspections
+          WHERE request_id = ?
+          ORDER BY created_at DESC
+          LIMIT 1
+        `,
+        [current.id],
+      )
+
+    if (
+      inspectionRows[0]?.status !==
+      'COMPLETED'
+    ) {
+      throw unprocessable(
+        'The field officer must complete the inspection before the case can be resolved.',
+      )
+    }
+
+    await withTransaction(
+      async (connection) => {
+        // Lock the request first so two administrators cannot resolve it twice.
+        const [lockedRequests] = await connection.execute<
+          (RowDataPacket & { status: string })[]
+        >(
+          `SELECT status FROM service_requests WHERE id = ? AND deleted_at IS NULL FOR UPDATE`,
+          [current.id],
+        )
+        const lockedRequest = lockedRequests[0]
+        if (!lockedRequest) throw notFound('Request not found.')
+        if (['RESOLVED','CLOSED','REJECTED','CANCELLED','DUPLICATE'].includes(lockedRequest.status)) {
+          throw conflict('This request has already changed. Refresh and try again.')
+        }
+
+        const [lockedInspections] = await connection.execute<
+          (RowDataPacket & { status: string })[]
+        >(
+          `SELECT status
+             FROM inspections
+            WHERE request_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            FOR UPDATE`,
+          [current.id],
+        )
+        if (lockedInspections[0]?.status !== 'COMPLETED') {
+          throw conflict('The latest inspection is not completed. Refresh and try again.')
+        }
+
+        const [resolveResult] = await connection.execute<ResultSetHeader>(
+          `UPDATE service_requests
+              SET status = 'RESOLVED', resolved_at = UTC_TIMESTAMP(), version = version + 1, updated_at = UTC_TIMESTAMP()
+            WHERE id = ? AND status NOT IN ('RESOLVED','CLOSED','REJECTED','CANCELLED','DUPLICATE')`,
+          [current.id],
+        )
+        if (resolveResult.affectedRows !== 1) {
+          throw conflict('This request has already changed. Refresh and try again.')
+        }
+
+        /*
+         * Citizen-visible final report.
+         */
+        await connection.execute(
+          `
+            INSERT INTO request_notes (
+              request_id,
+              author_user_id,
+              body,
+              visibility,
+              created_at
+            )
+            VALUES (
+              ?,
+              ?,
+              ?,
+              'CITIZEN_VISIBLE',
+              UTC_TIMESTAMP()
+            )
+          `,
+          [
+            current.id,
+            req.authUser!.id,
+            `FINAL RESOLUTION REPORT\n\n${input.report}`,
+          ],
+        )
+
+        await connection.execute(
+          `
+            INSERT INTO request_status_history (
+              request_id,
+              from_status,
+              to_status,
+              label,
+              note,
+              changed_by_user_id,
+              created_at
+            )
+            VALUES (
+              ?,
+              ?,
+              'RESOLVED',
+              'Case resolved',
+              ?,
+              ?,
+              UTC_TIMESTAMP()
+            )
+          `,
+          [
+            current.id,
+            current.status,
+            input.report,
+            req.authUser!.id,
+          ],
+        )
+
+        /*
+         * Notify complaint creator.
+         */
+        await createNotification(
+          {
+            userId:
+              current.created_by_user_id,
+
+            type:
+              'REQUEST_RESOLVED',
+
+            title:
+              'Your complaint has been resolved',
+
+            body:
+              `${current.request_code} has been completed. Open the request to view the resolution report.`,
+
+            entityType:
+              'SERVICE_REQUEST',
+
+            entityId:
+              current.request_code,
+
+            tone:
+              'SUCCESS',
+          },
+          connection,
+        )
+
+        await writeAudit(
+          {
+            actorUserId:
+              req.authUser!.id,
+
+            action:
+              'REQUEST_RESOLVED',
+
+            entityType:
+              'SERVICE_REQUEST',
+
+            entityId:
+              current.request_code,
+
+            beforeData: {
+              status:
+                current.status,
+            },
+
+            afterData: {
+              status:
+                'RESOLVED',
+
+              report:
+                input.report,
+            },
+
+            ipAddress:
+              req.ip,
+
+            userAgent:
+              req.get(
+                'user-agent',
+              ),
+
+            requestId:
+              req.requestId,
+          },
+          connection,
+        )
+      },
+    )
+
+    return ok(res, {
+      resolved: true,
+      status: 'RESOLVED',
+    })
+  }),
+)
 
 router.delete('/:code', requirePermission('request.delete'), asyncHandler(async (req, res) => {
   const current = await getVisibleRequest(routeParam(req.params.code, 'code'), req.authUser!)

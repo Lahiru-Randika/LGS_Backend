@@ -434,6 +434,30 @@ router.post(
           : 'NEEDS_APPROVAL'
 
     await withTransaction(async (connection) => {
+      // Serialize decisions on this approval. Without this row lock, two
+      // approvers could both read PENDING and both create a decision.
+      const [lockedApprovals] = await connection.execute<
+        (RowDataPacket & { status: string; assigned_to_user_id: number | null })[]
+      >(
+        `SELECT status, assigned_to_user_id
+           FROM approval_requests
+          WHERE id = ?
+          FOR UPDATE`,
+        [approval.id],
+      )
+      const lockedApproval = lockedApprovals[0]
+      if (!lockedApproval) throw notFound('Approval request not found.')
+      if (!['PENDING', 'INFO_REQUESTED'].includes(lockedApproval.status)) {
+        throw conflict('This approval has already been decided. Refresh and try again.')
+      }
+      if (
+        req.authUser!.role === 'APPROVER' &&
+        lockedApproval.assigned_to_user_id &&
+        lockedApproval.assigned_to_user_id !== req.authUser!.id
+      ) {
+        throw conflict('This approval is assigned to another approver.')
+      }
+
       const [requestRows] = await connection.execute<
         (RowDataPacket & { status: string })[]
       >(
@@ -571,7 +595,7 @@ router.post(
           entityId: id,
 
           beforeData: {
-            status: approval.status,
+            status: lockedApproval.status,
           },
 
           afterData: {

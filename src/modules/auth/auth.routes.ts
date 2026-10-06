@@ -190,6 +190,34 @@ router.get('/me', authenticate, asyncHandler(async (req, res) => {
   })
 }))
 
+router.post('/refresh', authenticate, asyncHandler(async (req, res) => {
+  const token = req.cookies?.[env.SESSION_COOKIE_NAME]
+  if (!token || typeof token !== 'string' || !req.authSessionHash) throw unauthorized('Session is invalid or expired.')
+
+  // Sliding session: a valid session is extended from the moment the user
+  // becomes active again. Screen lock/sleep therefore does not force login.
+  await pool.execute(
+    `UPDATE user_sessions
+        SET expires_at = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? HOUR)
+      WHERE token_hash = ? AND revoked_at IS NULL`,
+    [env.SESSION_TTL_HOURS, req.authSessionHash],
+  )
+  res.cookie(env.SESSION_COOKIE_NAME, token, cookieOptions())
+
+  const user = req.authUser!
+  return ok(res, {
+    user: {
+      id: user.publicId,
+      name: user.displayName,
+      email: user.email,
+      role: user.role,
+      departmentId: user.departmentId,
+      wardId: user.wardId,
+    },
+    permissions: user.permissions,
+  })
+}))
+
 router.post('/logout', authenticate, asyncHandler(async (req, res) => {
   if (req.authSessionHash) {
     await pool.execute('UPDATE user_sessions SET revoked_at = UTC_TIMESTAMP() WHERE token_hash = ?', [req.authSessionHash])
