@@ -1,4 +1,4 @@
-import type { RequestHandler } from 'express'
+import type { Request, RequestHandler } from 'express'
 import type { RowDataPacket } from 'mysql2'
 import { pool } from '../config/db'
 import { env } from '../config/env'
@@ -17,10 +17,35 @@ interface SessionUserRow extends RowDataPacket {
 
 interface PermissionRow extends RowDataPacket { code: string }
 
+/**
+ * Extracts session token from either:
+ * 1. Authorization header: "Bearer <token>"
+ * 2. HttpOnly Cookie: env.SESSION_COOKIE_NAME
+ *
+ * This dual-mode policy ensures resilience against browser cookie restrictions
+ * in cross-site setups while retaining full HttpOnly cookie benefits in same-site environments.
+ */
+export function extractToken(req: Request): string | null {
+  const authHeader = req.headers.authorization
+  if (authHeader && typeof authHeader === 'string') {
+    const [scheme, token] = authHeader.split(/\s+/)
+    if (scheme && /^Bearer$/i.test(scheme) && token) {
+      return token.trim()
+    }
+  }
+
+  const cookieToken = req.cookies?.[env.SESSION_COOKIE_NAME]
+  if (cookieToken && typeof cookieToken === 'string') {
+    return cookieToken.trim()
+  }
+
+  return null
+}
+
 export const authenticate: RequestHandler = async (req, _res, next) => {
   try {
-    const token = req.cookies?.[env.SESSION_COOKIE_NAME]
-    if (!token || typeof token !== 'string') return next(unauthorized())
+    const token = extractToken(req)
+    if (!token) return next(unauthorized('No authentication token provided.'))
     const hash = tokenHash(token)
 
     const [rows] = await pool.execute<SessionUserRow[]>(
@@ -68,7 +93,7 @@ export const authenticate: RequestHandler = async (req, _res, next) => {
 }
 
 export const optionalAuthenticate: RequestHandler = async (req, res, next) => {
-  const token = req.cookies?.[env.SESSION_COOKIE_NAME]
+  const token = extractToken(req)
   if (!token) return next()
   return authenticate(req, res, next)
 }

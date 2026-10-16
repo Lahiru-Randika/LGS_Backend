@@ -7,6 +7,7 @@ import pino from 'pino'
 
 import {
   allowedOrigins,
+  isAllowedOrigin,
   env,
 } from './config/env'
 
@@ -110,44 +111,15 @@ app.use(
 
 app.use(
   cors({
-    credentials:
-      true,
-
-    origin(
-      origin,
-      callback,
-    ) {
-      if (
-        !origin ||
-        allowedOrigins.includes(
-          origin,
-        )
-      ) {
-        return callback(
-          null,
-          true,
-        )
+    credentials: true,
+    origin(origin, callback) {
+      if (isAllowedOrigin(origin)) {
+        return callback(null, true)
       }
-
-      return callback(
-        new Error(
-          'Origin not allowed by CORS',
-        ),
-      )
+      return callback(new Error(`Origin ${origin} not allowed by CORS`))
     },
-
-    methods: [
-      'GET',
-      'POST',
-      'PATCH',
-      'DELETE',
-      'OPTIONS',
-    ],
-
-    allowedHeaders: [
-      'Content-Type',
-      'X-Request-ID',
-    ],
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'Accept'],
   }),
 )
 

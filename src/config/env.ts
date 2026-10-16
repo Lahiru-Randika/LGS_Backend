@@ -18,6 +18,7 @@ const envSchema = z.object({
   SESSION_COOKIE_NAME: z.string().min(1).default('lgs_session'),
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(168).default(168),
   SESSION_COOKIE_SECURE: boolFromString,
+  SESSION_COOKIE_SAME_SITE: z.enum(['lax', 'strict', 'none']).default('lax'),
   LOGIN_MAX_ATTEMPTS: z.coerce.number().int().min(3).max(20).default(5),
   LOGIN_LOCK_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
   UPLOAD_DIR: z.string().default('./uploads'),
@@ -43,4 +44,28 @@ if (env.NODE_ENV === 'production' && env.EXPOSE_INVITE_TOKEN) {
   throw new Error('EXPOSE_INVITE_TOKEN must be false in production.')
 }
 
-export const allowedOrigins = env.FRONTEND_ORIGINS.split(',').map((v) => v.trim()).filter(Boolean)
+const parsedOrigins = env.FRONTEND_ORIGINS.split(',').map((v) => v.trim()).filter(Boolean)
+if (env.NODE_ENV === 'development') {
+  const commonDevOrigins = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://localhost:4173',
+    'http://127.0.0.1:4173',
+  ]
+  for (const origin of commonDevOrigins) {
+    if (!parsedOrigins.includes(origin)) {
+      parsedOrigins.push(origin)
+    }
+  }
+}
+
+export const allowedOrigins = parsedOrigins
+
+export function isAllowedOrigin(origin?: string): boolean {
+  if (!origin) return true
+  if (allowedOrigins.includes(origin)) return true
+  if (/^https:\/\/lgs-dummy.*\.vercel\.app$/.test(origin)) return true
+  return false
+}

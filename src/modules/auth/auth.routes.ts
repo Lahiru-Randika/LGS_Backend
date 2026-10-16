@@ -5,7 +5,7 @@ import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise'
 import { z } from 'zod'
 import { pool, withTransaction } from '../../config/db'
 import { env } from '../../config/env'
-import { authenticate } from '../../middleware/authenticate'
+import { authenticate, extractToken } from '../../middleware/authenticate'
 import { loginRateLimit } from '../../middleware/rateLimits'
 import { writeAudit } from '../../services/audit.service'
 import { asyncHandler } from '../../utils/asyncHandler'
@@ -55,16 +55,18 @@ const acceptInviteSchema = z.object({
 })
 
 function cookieOptions() {
+  const sameSite = env.SESSION_COOKIE_SAME_SITE
+  const isSecure = env.SESSION_COOKIE_SECURE || sameSite === 'none' || env.NODE_ENV === 'production'
   return {
     httpOnly: true,
-    secure: env.SESSION_COOKIE_SECURE,
-    sameSite: 'lax' as const,
+    secure: isSecure,
+    sameSite: sameSite as 'lax' | 'strict' | 'none',
     path: '/',
     maxAge: env.SESSION_TTL_HOURS * 60 * 60 * 1000,
   }
 }
 
-async function createSession(userId: number, req: any, res: any) {
+async function createSession(userId: number, req: any, res: any): Promise<string> {
   const token = randomToken()
   const hash = tokenHash(token)
   await pool.execute(
@@ -73,6 +75,7 @@ async function createSession(userId: number, req: any, res: any) {
     [userId, hash, req.ip ?? null, req.get('user-agent')?.slice(0, 500) ?? null, env.SESSION_TTL_HOURS],
   )
   res.cookie(env.SESSION_COOKIE_NAME, token, cookieOptions())
+  return token
 }
 
 async function permissionsForRole(roleCode: string) {
@@ -159,10 +162,12 @@ router.post('/login', loginRateLimit, asyncHandler(async (req, res) => {
     await connection.execute('UPDATE users SET failed_login_attempts = 0, locked_until = NULL, last_login_at = UTC_TIMESTAMP() WHERE id = ?', [user.id])
     await writeAudit({ actorUserId: user.id, action: 'LOGIN_SUCCEEDED', entityType: 'USER', entityId: user.public_id, ipAddress: req.ip, userAgent: req.get('user-agent'), requestId: req.requestId }, connection)
   })
-  await createSession(user.id, req, res)
+  const token = await createSession(user.id, req, res)
   const permissions = await permissionsForRole(user.role_code)
 
   return ok(res, {
+    token,
+    expiresIn: env.SESSION_TTL_HOURS * 3600,
     user: {
       id: user.public_id,
       name: user.display_name,
@@ -191,8 +196,8 @@ router.get('/me', authenticate, asyncHandler(async (req, res) => {
 }))
 
 router.post('/refresh', authenticate, asyncHandler(async (req, res) => {
-  const token = req.cookies?.[env.SESSION_COOKIE_NAME]
-  if (!token || typeof token !== 'string' || !req.authSessionHash) throw unauthorized('Session is invalid or expired.')
+  const token = extractToken(req)
+  if (!token || !req.authSessionHash) throw unauthorized('Session is invalid or expired.')
 
   // Sliding session: a valid session is extended from the moment the user
   // becomes active again. Screen lock/sleep therefore does not force login.
@@ -206,6 +211,8 @@ router.post('/refresh', authenticate, asyncHandler(async (req, res) => {
 
   const user = req.authUser!
   return ok(res, {
+    token,
+    expiresIn: env.SESSION_TTL_HOURS * 3600,
     user: {
       id: user.publicId,
       name: user.displayName,
