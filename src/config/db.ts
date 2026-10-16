@@ -227,20 +227,15 @@ export async function dbPing(): Promise<boolean> {
 }
 
 /* =========================================================
-   OPTIONAL CONNECTION TEST
+   LIGHTWEIGHT POOL OBSERVABILITY
 ========================================================= */
 
-export async function testDatabaseConnection(): Promise<boolean> {
-  const connection =
-    await pool.getConnection()
-
-  try {
-    await connection.query(
-      'SELECT 1',
-    )
-
-    return true
-  } finally {
-    connection.release()
+export function getPoolStats() {
+  const p = (pool as any).pool
+  return {
+    totalConnections: p?._allConnections?.length ?? 0,
+    freeConnections: p?._freeConnections?.length ?? 0,
+    queueLength: p?._connectionQueue?.length ?? 0,
+    connectionLimit: env.DB_CONNECTION_LIMIT,
   }
 }

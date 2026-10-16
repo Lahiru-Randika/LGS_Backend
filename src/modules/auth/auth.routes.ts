@@ -5,7 +5,7 @@ import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise'
 import { z } from 'zod'
 import { pool, withTransaction } from '../../config/db'
 import { env } from '../../config/env'
-import { authenticate, extractToken, invalidateSessionCache } from '../../middleware/authenticate'
+import { authenticate, extractToken, invalidateSessionCache, invalidateUserSessionCache } from '../../middleware/authenticate'
 import { loginRateLimit } from '../../middleware/rateLimits'
 import { writeAudit } from '../../services/audit.service'
 import { asyncHandler } from '../../utils/asyncHandler'
@@ -274,6 +274,7 @@ router.post('/reset-password', loginRateLimit, asyncHandler(async (req, res) => 
     await connection.execute('UPDATE user_sessions SET revoked_at = UTC_TIMESTAMP() WHERE user_id = ? AND revoked_at IS NULL', [reset.user_id])
     await writeAudit({ actorUserId: reset.user_id, action: 'PASSWORD_RESET_COMPLETED', entityType: 'USER', entityId: reset.public_id, ipAddress: req.ip, userAgent: req.get('user-agent'), requestId: req.requestId }, connection)
   })
+  invalidateUserSessionCache(reset.user_id)
   return ok(res, { reset: true, loginRequired: true })
 }))
 
@@ -287,6 +288,7 @@ router.post('/change-password', authenticate, asyncHandler(async (req, res) => {
     await connection.execute('UPDATE user_sessions SET revoked_at = UTC_TIMESTAMP() WHERE user_id = ? AND revoked_at IS NULL', [req.authUser!.id])
     await writeAudit({ actorUserId: req.authUser!.id, action: 'PASSWORD_CHANGED', entityType: 'USER', entityId: req.authUser!.publicId, ipAddress: req.ip, userAgent: req.get('user-agent'), requestId: req.requestId }, connection)
   })
+  invalidateUserSessionCache(req.authUser!.id)
   res.clearCookie(env.SESSION_COOKIE_NAME, { ...cookieOptions(), maxAge: undefined })
   return ok(res, { changed: true, loginRequired: true })
 }))

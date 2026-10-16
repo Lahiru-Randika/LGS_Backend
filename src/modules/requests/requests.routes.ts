@@ -392,17 +392,10 @@ router.get('/:code', asyncHandler(async (req, res) => {
   const visibilityClause = req.authUser!.role === 'CITIZEN' ? "AND n.visibility IN ('PUBLIC','CITIZEN_VISIBLE')" : ''
   const attachmentVisibility = req.authUser!.role === 'CITIZEN' ? "AND a.visibility = 'CITIZEN_VISIBLE'" : ''
 
-  // Parallelize detail queries across the connection pool instead of sequential blocking roundtrips
-  const [
-    [details],
-    [history],
-    [notes],
-    [attachments],
-    [inspection],
-    [approval],
-    [booking],
-  ] = await Promise.all([
-    pool.execute<RowDataPacket[]>(
+  // Efficiently query detail records using a single dedicated connection to eliminate pool contention under load
+  const connection = await pool.getConnection()
+  try {
+    const [details] = await connection.execute<RowDataPacket[]>(
       `SELECT sr.request_code AS requestCode, sr.type, sr.title, sr.description, sr.status, sr.priority,
               sr.location_type AS locationType, sr.location_label AS locationLabel, sr.latitude, sr.longitude,
               sr.contact_preference AS contactPreference, sr.version, sr.created_at AS createdAt, sr.updated_at AS updatedAt,
@@ -418,48 +411,50 @@ router.get('/:code', asyncHandler(async (req, res) => {
          LEFT JOIN users assignee ON assignee.id = sr.assigned_to_user_id
         WHERE sr.id = ? LIMIT 1`,
       [request.id],
-    ),
-    pool.execute<RowDataPacket[]>(
+    )
+    const [history] = await connection.execute<RowDataPacket[]>(
       `SELECT h.from_status AS fromStatus, h.to_status AS toStatus, h.label, h.note,
               u.display_name AS changedBy, h.created_at AS createdAt
          FROM request_status_history h JOIN users u ON u.id = h.changed_by_user_id
         WHERE h.request_id = ? ORDER BY h.created_at`,
       [request.id],
-    ),
-    pool.execute<RowDataPacket[]>(
+    )
+    const [notes] = await connection.execute<RowDataPacket[]>(
       `SELECT n.id, n.body, n.visibility, u.display_name AS author, n.created_at AS createdAt
          FROM request_notes n JOIN users u ON u.id = n.author_user_id
         WHERE n.request_id = ? ${visibilityClause} ORDER BY n.created_at`,
       [request.id],
-    ),
-    pool.execute<RowDataPacket[]>(
+    )
+    const [attachments] = await connection.execute<RowDataPacket[]>(
       `SELECT a.public_id AS id, a.category, a.original_filename AS filename, a.mime_type AS mimeType,
               a.file_size AS fileSize, a.visibility, a.created_at AS createdAt
          FROM request_attachments a WHERE a.request_id = ? AND a.deleted_at IS NULL ${attachmentVisibility}
         ORDER BY a.created_at`,
       [request.id],
-    ),
-    pool.execute<RowDataPacket[]>(
+    )
+    const [inspection] = await connection.execute<RowDataPacket[]>(
       `SELECT i.public_id AS id, i.status, i.scheduled_for AS scheduledFor, i.started_at AS startedAt,
               i.completed_at AS completedAt, i.summary, u.display_name AS officerName
          FROM inspections i JOIN users u ON u.id = i.officer_user_id
         WHERE i.request_id = ? ORDER BY i.created_at DESC LIMIT 1`,
       [request.id],
-    ),
-    pool.execute<RowDataPacket[]>(
+    )
+    const [approval] = await connection.execute<RowDataPacket[]>(
       `SELECT a.public_id AS id, a.approval_type AS approvalType, a.requested_action AS requestedAction,
               a.justification, a.status, a.due_at AS dueAt, a.created_at AS createdAt, a.decided_at AS decidedAt
          FROM approval_requests a WHERE a.request_id = ? ORDER BY a.created_at DESC LIMIT 1`,
       [request.id],
-    ),
-    pool.execute<RowDataPacket[]>(
+    )
+    const [booking] = await connection.execute<RowDataPacket[]>(
       `SELECT booking_date AS date, start_time AS startTime, end_time AS endTime, participants, purpose, status
          FROM booking_details WHERE request_id = ? LIMIT 1`,
       [request.id],
-    ),
-  ])
+    )
 
-  return ok(res, { ...details[0], history, notes, attachments, inspection: inspection[0] ?? null, approval: approval[0] ?? null, booking: booking[0] ?? null })
+    return ok(res, { ...details[0], history, notes, attachments, inspection: inspection[0] ?? null, approval: approval[0] ?? null, booking: booking[0] ?? null })
+  } finally {
+    connection.release()
+  }
 }))
 
 router.patch('/:code', asyncHandler(async (req, res) => {

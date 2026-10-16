@@ -14,6 +14,7 @@ import {
 
 import {
   dbPing,
+  getPoolStats,
 } from './config/db'
 
 import {
@@ -195,6 +196,8 @@ app.get(
 
             database,
 
+            pool: getPoolStats(),
+
             time:
               new Date()
                 .toISOString(),
@@ -239,8 +242,6 @@ api.use(
   '/auth',
   authRoutes,
 )
-
-api.use('/map/cmc', cmcGisRoutes)
 
 api.use(
   '/users',

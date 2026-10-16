@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { Router } from 'express'
-import type { RowDataPacket } from 'mysql2/promise'
+import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise'
 import { z } from 'zod'
 
 import { pool, withTransaction } from '../../config/db'
@@ -300,34 +300,27 @@ router.post(
           WHERE bd.facility_building_id = ?
             AND bd.booking_date = ?
             AND bd.status NOT IN ('CANCELLED', 'REJECTED')
-            AND (bd.start_time < ? AND bd.end_time > ?)
+            AND (bd.start_time IS NULL OR bd.end_time IS NULL OR (bd.start_time < ? AND bd.end_time > ?))
           FOR UPDATE`,
         [facilityId, input.date, eTime, sTime],
       )
 
       if (collisions.length > 0) {
         const existing = collisions[0]
+        const slotText = existing.startFormatted && existing.endFormatted
+          ? `${existing.startFormatted} – ${existing.endFormatted}`
+          : 'Full Day'
         throw conflict(
-          `This premises is already booked for the selected time slot (${existing.startFormatted} – ${existing.endFormatted}). Please choose another time slot or facility.`,
+          `This premises is already booked for the selected time slot (${slotText}). Please choose another time slot or facility.`,
         )
       }
 
-      // 3. Generate booking code BK-YYYY-XXXX
-      const year = new Date().getUTCFullYear()
-      const [countRows] = await connection.execute<RowDataPacket[]>(
-        'SELECT COUNT(*) AS total FROM booking_details WHERE YEAR(created_at) = ?',
-        [year],
-      )
-      const nextNum = Number(countRows[0]?.total || 0) + 22
-      const code = `BK-${year}-${String(nextNum).padStart(4, '0')}`
-
-      // 4. Insert into booking_details
-      await connection.execute(
+      // 3. Atomically insert into booking_details to obtain an unambiguous, monotonically unique auto-increment id
+      const [result] = await connection.execute<ResultSetHeader>(
         `INSERT INTO booking_details
           (booking_code, user_id, facility_building_id, booking_date, start_time, end_time, participants, purpose, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'CONFIRMED', UTC_TIMESTAMP(), UTC_TIMESTAMP())`,
+         VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, 'CONFIRMED', UTC_TIMESTAMP(), UTC_TIMESTAMP())`,
         [
-          code,
           req.authUser!.id,
           facilityId,
           input.date,
@@ -337,6 +330,29 @@ router.post(
           input.purpose || 'Municipal facility booking',
         ],
       )
+
+      const insertId = result.insertId
+      const year = new Date().getUTCFullYear()
+      let code = `BK-${year}-${String(insertId + 20).padStart(4, '0')}`
+
+      // Assign the unique booking code; retry with disambiguating suffix on duplicate key collision
+      let attempts = 0
+      while (attempts < 5) {
+        try {
+          await connection.execute(
+            'UPDATE booking_details SET booking_code = ? WHERE id = ?',
+            [code, insertId],
+          )
+          break
+        } catch (err: any) {
+          if (err?.code === 'ER_DUP_ENTRY' && attempts < 4) {
+            attempts++
+            code = `BK-${year}-${String(insertId + 20 + attempts).padStart(4, '0')}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`
+          } else {
+            throw err
+          }
+        }
+      }
 
       return { bookingCode: code, facility: facilityRow }
     })

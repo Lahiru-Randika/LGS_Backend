@@ -13,7 +13,12 @@ const router = Router()
 router.use(optionalAuthenticate)
 
 /* =========================================================
-   CMC GIS STORAGE
+   CMC GIS STORAGE & BOUNDED IN-MEMORY CACHE
+   - Upper memory limit: 50MB max total cache bytes
+   - LRU eviction of old layer versions when capacity is exceeded
+   - In-flight request deduplication prevents concurrent I/O stampedes
+   - Directory jail ensures path traversal is impossible
+   - ETag support enables 304 Not Modified browser re-validations
 ========================================================= */
 
 const CMC_GIS_ROOT = path.resolve(
@@ -23,17 +28,97 @@ const CMC_GIS_ROOT = path.resolve(
   'cmc',
 )
 
-const geoJsonFileCache = new Map<string, { content: string; mtimeMs: number }>()
+const MAX_GIS_CACHE_BYTES = 50 * 1024 * 1024 // 50 MB
+const MAX_GIS_CACHE_ENTRIES = 50
 
-async function getCachedGeoJsonContent(filePath: string): Promise<string> {
-  const stat = await fs.stat(filePath)
-  const cached = geoJsonFileCache.get(filePath)
-  if (cached && cached.mtimeMs === stat.mtimeMs) {
-    return cached.content
+interface CachedGeoJson {
+  content: string
+  mtimeMs: number
+  byteLength: number
+  etag: string
+  lastAccessed: number
+}
+
+const geoJsonFileCache = new Map<string, CachedGeoJson>()
+let currentCacheBytes = 0
+const inFlightFileReads = new Map<string, Promise<CachedGeoJson>>()
+
+export function clearGeoJsonFileCache() {
+  geoJsonFileCache.clear()
+  currentCacheBytes = 0
+}
+
+function evictIfNecessary(incomingBytes: number) {
+  while (
+    (currentCacheBytes + incomingBytes > MAX_GIS_CACHE_BYTES ||
+      geoJsonFileCache.size >= MAX_GIS_CACHE_ENTRIES) &&
+    geoJsonFileCache.size > 0
+  ) {
+    let oldestKey: string | null = null
+    let oldestAccess = Infinity
+    for (const [k, v] of geoJsonFileCache.entries()) {
+      if (v.lastAccessed < oldestAccess) {
+        oldestAccess = v.lastAccessed
+        oldestKey = k
+      }
+    }
+    if (oldestKey) {
+      const entry = geoJsonFileCache.get(oldestKey)
+      if (entry) currentCacheBytes -= entry.byteLength
+      geoJsonFileCache.delete(oldestKey)
+    } else {
+      break
+    }
   }
-  const content = await fs.readFile(filePath, 'utf8')
-  geoJsonFileCache.set(filePath, { content, mtimeMs: stat.mtimeMs })
-  return content
+}
+
+async function getCachedGeoJsonContent(filePath: string): Promise<CachedGeoJson> {
+  const resolvedPath = path.resolve(filePath)
+  if (!resolvedPath.startsWith(CMC_GIS_ROOT) || resolvedPath.includes('\0')) {
+    throw forbidden('Access to requested path is forbidden.')
+  }
+
+  const stat = await fs.stat(resolvedPath)
+  const cached = geoJsonFileCache.get(resolvedPath)
+  if (cached && cached.mtimeMs === stat.mtimeMs) {
+    cached.lastAccessed = Date.now()
+    return cached
+  }
+
+  // Deduplicate concurrent disk reads for the same layer
+  const inFlight = inFlightFileReads.get(resolvedPath)
+  if (inFlight) {
+    return inFlight
+  }
+
+  const readPromise = (async () => {
+    const content = await fs.readFile(resolvedPath, 'utf8')
+    const byteLength = Buffer.byteLength(content, 'utf8')
+    const etag = `W/"${stat.size.toString(16)}-${stat.mtimeMs.toString(16)}"`
+
+    if (cached) {
+      currentCacheBytes -= cached.byteLength
+    }
+
+    evictIfNecessary(byteLength)
+
+    const entry: CachedGeoJson = {
+      content,
+      mtimeMs: stat.mtimeMs,
+      byteLength,
+      etag,
+      lastAccessed: Date.now(),
+    }
+
+    geoJsonFileCache.set(resolvedPath, entry)
+    currentCacheBytes += byteLength
+    return entry
+  })().finally(() => {
+    inFlightFileReads.delete(resolvedPath)
+  })
+
+  inFlightFileReads.set(resolvedPath, readPromise)
+  return readPromise
 }
 
 type CmcAccess =
@@ -497,10 +582,10 @@ router.get(
           config.file,
         )
 
-      let content: string
+      let cached: CachedGeoJson
 
       try {
-        content = await getCachedGeoJsonContent(filePath)
+        cached = await getCachedGeoJsonContent(filePath)
       } catch (
         error:
           any
@@ -515,6 +600,12 @@ router.get(
         }
 
         throw error
+      }
+
+      // ETag conditional validation
+      res.setHeader('ETag', cached.etag)
+      if (req.header('if-none-match') === cached.etag) {
+        return res.status(304).end()
       }
 
       if (
@@ -541,7 +632,7 @@ router.get(
           200,
         )
         .send(
-          content,
+          cached.content,
         )
     },
   ),

@@ -11,6 +11,7 @@ import {
 
 import {
   authenticate,
+  invalidateUserSessionCache,
 } from '../../middleware/authenticate'
 
 import {
@@ -782,6 +783,8 @@ router.patch(
         )
       }
 
+      let targetUserId: number | null = null
+
       await withTransaction(
         async (
           connection,
@@ -843,6 +846,8 @@ router.patch(
               'User not found.',
             )
           }
+
+          targetUserId = target.id
 
           /* ===============================================
              HIERARCHY CHECK:
@@ -1128,6 +1133,10 @@ router.patch(
         },
       )
 
+      if (targetUserId) {
+        invalidateUserSessionCache(targetUserId)
+      }
+
       return ok(
         res,
         {
@@ -1193,6 +1202,8 @@ router.patch(
         )
       }
 
+      let targetUserId: number | null = null
+
       await withTransaction(
         async (
           connection,
@@ -1246,6 +1257,8 @@ router.patch(
               'User not found.',
             )
           }
+
+          targetUserId = target.id
 
           /* ===============================================
              CANNOT MANAGE ABOVE OWN LEVEL
@@ -1410,6 +1423,10 @@ router.patch(
           )
         },
       )
+
+      if (targetUserId) {
+        invalidateUserSessionCache(targetUserId)
+      }
 
       return ok(
         res,
