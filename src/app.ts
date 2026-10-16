@@ -53,6 +53,7 @@ import cmcGisRoutes from './modules/map/cmc-gis.routes'
 import notificationRoutes from './modules/notifications/notifications.routes'
 import dashboardRoutes from './modules/dashboard/dashboard.routes'
 import publicRoutes from './modules/public/public.routes'
+import bookingRoutes from './modules/bookings/bookings.routes'
 import taxRoutes from './modules/tax/tax.routes'
 import analyticsRoutes from './modules/analytics/analytics.routes'
 import contentRoutes from './modules/content/content.routes'
@@ -323,6 +324,11 @@ api.use(
 api.use(
   '/public',
   publicRoutes,
+)
+
+api.use(
+  '/bookings',
+  bookingRoutes,
 )
 
 api.use(

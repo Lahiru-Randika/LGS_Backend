@@ -9,7 +9,7 @@ import { requirePermission } from '../../middleware/authorize'
 import { writeAudit } from '../../services/audit.service'
 import { createNotification } from '../../services/notification.service'
 import { asyncHandler } from '../../utils/asyncHandler'
-import { badRequest, notFound, unprocessable } from '../../utils/errors'
+import { badRequest, conflict, notFound, unprocessable } from '../../utils/errors'
 import { created, ok } from '../../utils/http'
 import { routeParam } from '../../utils/routeParam'
 

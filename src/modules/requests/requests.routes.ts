@@ -258,11 +258,49 @@ router.post('/', requirePermission('request.create'), upload.array('files', env.
         )
         if (profiles[0] && profiles[0].bookable !== 1) throw unprocessable('This public facility is not currently bookable.')
         if (profiles[0]?.capacity && input.booking.participants > profiles[0].capacity) throw unprocessable('Participant count exceeds facility capacity.')
+
+        const bStart = input.booking.startTime ? (input.booking.startTime.length === 5 ? `${input.booking.startTime}:00` : input.booking.startTime) : '00:00:00'
+        const bEnd = input.booking.endTime ? (input.booking.endTime.length === 5 ? `${input.booking.endTime}:00` : input.booking.endTime) : '23:59:59'
+
+        // Block past dates and past times
+        const now = new Date()
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+        const currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:00`
+
+        if (input.booking.date < todayStr) {
+          throw unprocessable('Cannot book a facility for a past date. Please select today or a future date.')
+        }
+        if (input.booking.date === todayStr && bStart < currentTimeStr) {
+          throw unprocessable('Cannot book a time slot in the past. Please choose a future time slot.')
+        }
+
+        // Check for colliding time slots on the same venue and date
+        const [collisions] = await connection.execute<RowDataPacket[]>(
+          `SELECT bd.id,
+                  COALESCE(bd.booking_code, CONCAT('BK-', LPAD(bd.id, 4, '0'))) AS bookingCode,
+                  TIME_FORMAT(bd.start_time, '%h:%i %p') AS startFormatted,
+                  TIME_FORMAT(bd.end_time, '%h:%i %p') AS endFormatted
+             FROM booking_details bd
+            WHERE bd.facility_building_id = ?
+              AND bd.booking_date = ?
+              AND bd.status NOT IN ('CANCELLED', 'REJECTED')
+              AND (bd.start_time < ? AND bd.end_time > ?)
+            LIMIT 1`,
+          [buildingId, input.booking.date, bEnd, bStart],
+        )
+
+        if (collisions.length > 0) {
+          const existing = collisions[0]
+          throw conflict(
+            `This premises is already booked for the selected time slot (${existing.startFormatted} – ${existing.endFormatted}). Please choose another time slot or facility.`,
+          )
+        }
+
         await connection.execute(
           `INSERT INTO booking_details
-            (request_id, facility_building_id, booking_date, start_time, end_time, participants, purpose, status, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING', UTC_TIMESTAMP())`,
-          [requestId, buildingId, input.booking.date, input.booking.startTime ?? null, input.booking.endTime ?? null, input.booking.participants, input.booking.purpose ?? null],
+            (request_id, user_id, booking_code, facility_building_id, booking_date, start_time, end_time, participants, purpose, status, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', UTC_TIMESTAMP())`,
+          [requestId, req.authUser!.id, requestCode, buildingId, input.booking.date, input.booking.startTime ?? null, input.booking.endTime ?? null, input.booking.participants, input.booking.purpose ?? null],
         )
       }
 

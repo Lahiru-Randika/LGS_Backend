@@ -12,7 +12,8 @@
     "db:create": "tsx scripts/create-database.ts",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "tsx scripts/seed.ts",
-    "db:setup": "npm run db:create && npm run db:migrate && npm run db:seed"
+    "db:bookings-tax": "tsx scripts/setup-bookings-and-tax.ts",
+    "db:setup": "npm run db:create && npm run db:migrate && npm run db:seed && npm run db:bookings-tax"
   },
   "engines": {
     "node": ">=20.0.0"
