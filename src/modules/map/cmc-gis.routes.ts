@@ -23,6 +23,19 @@ const CMC_GIS_ROOT = path.resolve(
   'cmc',
 )
 
+const geoJsonFileCache = new Map<string, { content: string; mtimeMs: number }>()
+
+async function getCachedGeoJsonContent(filePath: string): Promise<string> {
+  const stat = await fs.stat(filePath)
+  const cached = geoJsonFileCache.get(filePath)
+  if (cached && cached.mtimeMs === stat.mtimeMs) {
+    return cached.content
+  }
+  const content = await fs.readFile(filePath, 'utf8')
+  geoJsonFileCache.set(filePath, { content, mtimeMs: stat.mtimeMs })
+  return content
+}
+
 type CmcAccess =
   | 'PUBLIC'
   | 'INTERNAL'
@@ -484,15 +497,10 @@ router.get(
           config.file,
         )
 
-      let content:
-        string
+      let content: string
 
       try {
-        content =
-          await fs.readFile(
-            filePath,
-            'utf8',
-          )
+        content = await getCachedGeoJsonContent(filePath)
       } catch (
         error:
           any

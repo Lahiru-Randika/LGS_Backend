@@ -1,4 +1,5 @@
 import express from 'express'
+import compression from 'compression'
 import cookieParser from 'cookie-parser'
 import cors from 'cors'
 import helmet from 'helmet'
@@ -120,6 +121,12 @@ app.use(
     },
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'Accept'],
+  }),
+)
+
+app.use(
+  compression({
+    threshold: 1024, // Compress responses larger than 1KB
   }),
 )
 

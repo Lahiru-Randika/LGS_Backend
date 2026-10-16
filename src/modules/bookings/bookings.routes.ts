@@ -3,7 +3,7 @@ import { Router } from 'express'
 import type { RowDataPacket } from 'mysql2/promise'
 import { z } from 'zod'
 
-import { pool } from '../../config/db'
+import { pool, withTransaction } from '../../config/db'
 import { authenticate } from '../../middleware/authenticate'
 import { writeAudit } from '../../services/audit.service'
 import { createNotification } from '../../services/notification.service'
@@ -249,11 +249,6 @@ router.post(
       [facilityId],
     )
 
-    const facility = facRows[0]
-    if (!facility) {
-      throw notFound('Selected facility not found.')
-    }
-
     // Format start & end time
     const sTime = input.startTime.includes(':') && input.startTime.length === 5 ? `${input.startTime}:00` : input.startTime
     const eTime = input.endTime.includes(':') && input.endTime.length === 5 ? `${input.endTime}:00` : input.endTime
@@ -275,57 +270,76 @@ router.post(
     }
 
     /* =========================================================
-       COLLISION & DOUBLE BOOKING CHECK
-       Two bookings overlap if: newStart < existingEnd AND newEnd > existingStart
+       ATOMIC TRANSACTION WITH ROW LOCKING
+       Guarantees collision prevention under 100+ concurrent users.
     ========================================================= */
-    const [collisions] = await pool.execute<RowDataPacket[]>(
-      `SELECT bd.id,
-              COALESCE(bd.booking_code, CONCAT('BK-', LPAD(bd.id, 4, '0'))) AS bookingCode,
-              COALESCE(b.resolved_name, b.name) AS facilityName,
-              TIME_FORMAT(bd.start_time, '%h:%i %p') AS startFormatted,
-              TIME_FORMAT(bd.end_time, '%h:%i %p') AS endFormatted
-         FROM booking_details bd
-         JOIN buildings b ON b.id = bd.facility_building_id
-        WHERE bd.facility_building_id = ?
-          AND bd.booking_date = ?
-          AND bd.status NOT IN ('CANCELLED', 'REJECTED')
-          AND (bd.start_time < ? AND bd.end_time > ?)
-        LIMIT 1`,
-      [facilityId, input.date, eTime, sTime],
-    )
-
-    if (collisions.length > 0) {
-      const existing = collisions[0]
-      throw conflict(
-        `This premises is already booked for the selected time slot (${existing.startFormatted} – ${existing.endFormatted}). Please choose another time slot or facility.`,
+    const { bookingCode, facility } = await withTransaction(async (connection) => {
+      // 1. Lock the facility row to serialize concurrent booking attempts
+      const [facRows] = await connection.execute<RowDataPacket[]>(
+        `SELECT b.id, COALESCE(b.resolved_name, b.name) AS name, p.capacity
+           FROM buildings b
+           LEFT JOIN public_facility_profiles p ON p.building_id = b.id
+          WHERE b.id = ? AND b.deleted_at IS NULL LIMIT 1 FOR UPDATE`,
+        [facilityId],
       )
-    }
 
-    // Generate booking code BK-YYYY-XXXX
-    const year = new Date().getUTCFullYear()
-    const [countRows] = await pool.execute<RowDataPacket[]>(
-      'SELECT COUNT(*) AS total FROM booking_details WHERE YEAR(created_at) = ?',
-      [year],
-    )
-    const nextNum = Number(countRows[0]?.total || 0) + 22
-    const bookingCode = `BK-${year}-${String(nextNum).padStart(4, '0')}`
+      const facilityRow = facRows[0]
+      if (!facilityRow) {
+        throw notFound('Selected facility not found.')
+      }
 
-    // Insert into booking_details
-    await pool.execute(
-      `INSERT INTO booking_details
-        (booking_code, user_id, facility_building_id, booking_date, start_time, end_time, participants, purpose, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'CONFIRMED', UTC_TIMESTAMP(), UTC_TIMESTAMP())`,
-      [
-        bookingCode,
-        req.authUser!.id,
-        facilityId,
-        input.date,
-        sTime,
-        eTime,
-        input.participants,
-        input.purpose || 'Municipal facility booking',
-      ],
-    )
+      // 2. Collision check inside transaction with row lock
+      const [collisions] = await connection.execute<RowDataPacket[]>(
+        `SELECT bd.id,
+                COALESCE(bd.booking_code, CONCAT('BK-', LPAD(bd.id, 4, '0'))) AS bookingCode,
+                COALESCE(b.resolved_name, b.name) AS facilityName,
+                TIME_FORMAT(bd.start_time, '%h:%i %p') AS startFormatted,
+                TIME_FORMAT(bd.end_time, '%h:%i %p') AS endFormatted
+           FROM booking_details bd
+           JOIN buildings b ON b.id = bd.facility_building_id
+          WHERE bd.facility_building_id = ?
+            AND bd.booking_date = ?
+            AND bd.status NOT IN ('CANCELLED', 'REJECTED')
+            AND (bd.start_time < ? AND bd.end_time > ?)
+          FOR UPDATE`,
+        [facilityId, input.date, eTime, sTime],
+      )
+
+      if (collisions.length > 0) {
+        const existing = collisions[0]
+        throw conflict(
+          `This premises is already booked for the selected time slot (${existing.startFormatted} – ${existing.endFormatted}). Please choose another time slot or facility.`,
+        )
+      }
+
+      // 3. Generate booking code BK-YYYY-XXXX
+      const year = new Date().getUTCFullYear()
+      const [countRows] = await connection.execute<RowDataPacket[]>(
+        'SELECT COUNT(*) AS total FROM booking_details WHERE YEAR(created_at) = ?',
+        [year],
+      )
+      const nextNum = Number(countRows[0]?.total || 0) + 22
+      const code = `BK-${year}-${String(nextNum).padStart(4, '0')}`
+
+      // 4. Insert into booking_details
+      await connection.execute(
+        `INSERT INTO booking_details
+          (booking_code, user_id, facility_building_id, booking_date, start_time, end_time, participants, purpose, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'CONFIRMED', UTC_TIMESTAMP(), UTC_TIMESTAMP())`,
+        [
+          code,
+          req.authUser!.id,
+          facilityId,
+          input.date,
+          sTime,
+          eTime,
+          input.participants,
+          input.purpose || 'Municipal facility booking',
+        ],
+      )
+
+      return { bookingCode: code, facility: facilityRow }
+    })
 
     // Notify user
     try {

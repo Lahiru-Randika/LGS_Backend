@@ -17,6 +17,53 @@ interface SessionUserRow extends RowDataPacket {
 
 interface PermissionRow extends RowDataPacket { code: string }
 
+/* =========================================================
+   IN-MEMORY PERFORMANCE CACHES (Fast-Path for Concurrency)
+   - Eliminates redundant network DB hops on rapid concurrent requests
+   - Role permissions: 5-minute TTL (role permissions are static at runtime)
+   - Active user session: 10-second sliding TTL (invalidated on logout)
+========================================================= */
+
+const ROLE_PERMISSIONS_CACHE = new Map<string, { permissions: string[]; expiresAt: number }>()
+const SESSION_FAST_PATH_CACHE = new Map<string, { authUser: Express.AuthUser; expiresAt: number }>()
+
+export function invalidateSessionCache(tokenHash?: string) {
+  if (tokenHash) {
+    SESSION_FAST_PATH_CACHE.delete(tokenHash)
+  } else {
+    SESSION_FAST_PATH_CACHE.clear()
+  }
+}
+
+export function invalidateRolePermissionsCache() {
+  ROLE_PERMISSIONS_CACHE.clear()
+}
+
+async function getCachedRolePermissions(roleCode: string): Promise<string[]> {
+  const now = Date.now()
+  const cached = ROLE_PERMISSIONS_CACHE.get(roleCode)
+  if (cached && cached.expiresAt > now) {
+    return cached.permissions
+  }
+
+  const [permissionRows] = await pool.execute<PermissionRow[]>(
+    `SELECT p.code
+       FROM permissions p
+       JOIN role_permissions rp ON rp.permission_id = p.id
+       JOIN roles r ON r.id = rp.role_id
+      WHERE r.code = ?`,
+    [roleCode],
+  )
+
+  const permissions = permissionRows.map((p) => p.code)
+  ROLE_PERMISSIONS_CACHE.set(roleCode, {
+    permissions,
+    expiresAt: now + 5 * 60 * 1000, // 5 minutes
+  })
+
+  return permissions
+}
+
 /**
  * Extracts session token from either:
  * 1. Authorization header: "Bearer <token>"
@@ -48,6 +95,15 @@ export const authenticate: RequestHandler = async (req, _res, next) => {
     if (!token) return next(unauthorized('No authentication token provided.'))
     const hash = tokenHash(token)
 
+    // Fast-path: Check short-lived process cache (10s window for burst requests)
+    const now = Date.now()
+    const cachedSession = SESSION_FAST_PATH_CACHE.get(hash)
+    if (cachedSession && cachedSession.expiresAt > now) {
+      req.authUser = cachedSession.authUser
+      req.authSessionHash = hash
+      return next()
+    }
+
     const [rows] = await pool.execute<SessionUserRow[]>(
       `SELECT u.id, u.public_id, u.email, u.display_name, r.code AS role_code,
               u.department_id, u.ward_id
@@ -64,18 +120,14 @@ export const authenticate: RequestHandler = async (req, _res, next) => {
     )
 
     const row = rows[0]
-    if (!row) return next(unauthorized('Session is invalid or expired.'))
+    if (!row) {
+      SESSION_FAST_PATH_CACHE.delete(hash)
+      return next(unauthorized('Session is invalid or expired.'))
+    }
 
-    const [permissionRows] = await pool.execute<PermissionRow[]>(
-      `SELECT p.code
-         FROM permissions p
-         JOIN role_permissions rp ON rp.permission_id = p.id
-         JOIN roles r ON r.id = rp.role_id
-        WHERE r.code = ?`,
-      [row.role_code],
-    )
+    const permissions = await getCachedRolePermissions(row.role_code)
 
-    req.authUser = {
+    const authUser: Express.AuthUser = {
       id: row.id,
       publicId: row.public_id,
       email: row.email,
@@ -83,8 +135,16 @@ export const authenticate: RequestHandler = async (req, _res, next) => {
       role: row.role_code,
       departmentId: row.department_id,
       wardId: row.ward_id,
-      permissions: permissionRows.map((p) => p.code),
+      permissions,
     }
+
+    // Cache valid session for 10 seconds to collapse parallel bursts
+    SESSION_FAST_PATH_CACHE.set(hash, {
+      authUser,
+      expiresAt: now + 10_000,
+    })
+
+    req.authUser = authUser
     req.authSessionHash = hash
     next()
   } catch (error) {

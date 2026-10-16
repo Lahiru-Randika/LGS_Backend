@@ -281,6 +281,22 @@ router.get(
         hasCoordinates
       ) {
         /*
+          Bounding box prefilter:
+          Limits candidate buildings to a tight rectangular boundary
+          using the composite index (active, deleted_at, latitude, longitude).
+          This avoids running expensive trigonometric functions on every building in Colombo.
+        */
+        const latDelta = q.radiusMeters / 111139
+        const lngDelta = q.radiusMeters / (111139 * Math.max(0.1, Math.cos((q.latitude! * Math.PI) / 180)))
+        const minLat = q.latitude! - latDelta
+        const maxLat = q.latitude! + latDelta
+        const minLng = q.longitude! - lngDelta
+        const maxLng = q.longitude! + lngDelta
+
+        where.push('b.latitude BETWEEN ? AND ? AND b.longitude BETWEEN ? AND ?')
+        params.push(minLat, maxLat, minLng, maxLng)
+
+        /*
           MySQL Haversine distance in metres.
         */
         const distanceExpression =

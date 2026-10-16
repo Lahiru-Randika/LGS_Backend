@@ -133,6 +133,12 @@ export const pool: Pool =
     connectionLimit:
       env.DB_CONNECTION_LIMIT,
 
+    maxIdle:
+      env.DB_CONNECTION_LIMIT,
+
+    idleTimeout:
+      60_000,
+
     waitForConnections:
       true,
 

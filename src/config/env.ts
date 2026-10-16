@@ -12,7 +12,7 @@ const envSchema = z.object({
   LOG_LEVEL: z.string().default('info'),
   DATABASE_URL: z.string().min(1),
   DB_SSL: boolFromString,
-  DB_CONNECTION_LIMIT: z.coerce.number().int().min(1).max(100).default(10),
+  DB_CONNECTION_LIMIT: z.coerce.number().int().min(1).max(100).default(30),
   FRONTEND_ORIGINS: z.string().default('http://localhost:5173'),
   TRUST_PROXY: z.coerce.number().int().min(0).max(2).default(1),
   SESSION_COOKIE_NAME: z.string().min(1).default('lgs_session'),

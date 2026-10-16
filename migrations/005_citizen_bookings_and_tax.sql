@@ -6,7 +6,6 @@ ALTER TABLE booking_details MODIFY COLUMN request_id BIGINT UNSIGNED NULL;
 
 -- 2. Add columns to booking_details if not already added
 DROP PROCEDURE IF EXISTS _patch_schema_005;
-DELIMITER $$
 CREATE PROCEDURE _patch_schema_005()
 BEGIN
   -- booking_details.user_id
@@ -71,8 +70,7 @@ BEGIN
   ) THEN
     ALTER TABLE tax_payments ADD COLUMN payment_method VARCHAR(50) NOT NULL DEFAULT 'ONLINE' AFTER status;
   END IF;
-END $$
-DELIMITER ;
+END;
 
 CALL _patch_schema_005();
 DROP PROCEDURE IF EXISTS _patch_schema_005;

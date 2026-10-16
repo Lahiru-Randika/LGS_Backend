@@ -5,7 +5,7 @@ import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise'
 import { z } from 'zod'
 import { pool, withTransaction } from '../../config/db'
 import { env } from '../../config/env'
-import { authenticate, extractToken } from '../../middleware/authenticate'
+import { authenticate, extractToken, invalidateSessionCache } from '../../middleware/authenticate'
 import { loginRateLimit } from '../../middleware/rateLimits'
 import { writeAudit } from '../../services/audit.service'
 import { asyncHandler } from '../../utils/asyncHandler'
@@ -227,6 +227,7 @@ router.post('/refresh', authenticate, asyncHandler(async (req, res) => {
 
 router.post('/logout', authenticate, asyncHandler(async (req, res) => {
   if (req.authSessionHash) {
+    invalidateSessionCache(req.authSessionHash)
     await pool.execute('UPDATE user_sessions SET revoked_at = UTC_TIMESTAMP() WHERE token_hash = ?', [req.authSessionHash])
   }
   res.clearCookie(env.SESSION_COOKIE_NAME, { ...cookieOptions(), maxAge: undefined })
