@@ -187,13 +187,24 @@ async function main() {
       {
         code: 'LGS-FAC-000003',
         name: 'Town Hall Auditorium',
-        address: 'Town Hall Premises, Colombo 07',
+        address: 'Colombo Municipal Council, Town Hall, Colombo 07',
         latitude: 6.9150,
         longitude: 79.8640,
         capacity: 450,
         openingTime: '08:30:00',
         closingTime: '20:00:00',
         description: 'Historic auditorium equipped with audio-visual equipment for public conferences.',
+      },
+      {
+        code: 'LGS-FAC-000004',
+        name: 'Community Meeting Room',
+        address: 'Colombo Municipal Council, Meeting Room 2',
+        latitude: 6.9145,
+        longitude: 79.8638,
+        capacity: 40,
+        openingTime: '08:00:00',
+        closingTime: '18:00:00',
+        description: 'Air-conditioned meeting room for resident associations and civic consultations.',
       },
     ]
 
@@ -257,60 +268,112 @@ async function main() {
       const [groundRows] = await connection.execute<RowDataPacket[]>(
         "SELECT id FROM buildings WHERE building_code = 'LGS-FAC-000002' LIMIT 1",
       )
+      const [auditoriumRows] = await connection.execute<RowDataPacket[]>(
+        "SELECT id FROM buildings WHERE building_code = 'LGS-FAC-000003' LIMIT 1",
+      )
+      const [meetingRoomRows] = await connection.execute<RowDataPacket[]>(
+        "SELECT id FROM buildings WHERE building_code = 'LGS-FAC-000004' LIMIT 1",
+      )
       const hallId = hallRows[0]?.id
       const groundId = groundRows[0]?.id
+      const auditoriumId = auditoriumRows[0]?.id
+      const meetingRoomId = meetingRoomRows[0]?.id
 
       for (const citizen of citizenUsers) {
         console.log(`Seeding data for citizen: ${citizen.display_name} (${citizen.email}, ID: ${citizen.id})...`)
 
-        // --- BOOKING 1: BK-2026-0018 (Municipal Community Hall, 18 Oct 2026, 09:00 AM – 12:00 PM, Confirmed)
-        if (hallId) {
-          const bookingCode1 = 'BK-2026-0018'
-          const [existingB1] = await connection.execute<RowDataPacket[]>(
-            'SELECT id FROM booking_details WHERE booking_code = ? OR (user_id = ? AND facility_building_id = ? AND booking_date = ?) LIMIT 1',
-            [bookingCode1, citizen.id, hallId, '2026-10-18'],
+        // 1. BK-2026-0024 (Public Sports Ground, 02 Oct 2026, 04:00 PM – 06:00 PM, UPCOMING)
+        if (groundId) {
+          const bookingCode = 'BK-2026-0024'
+          const [existing] = await connection.execute<RowDataPacket[]>(
+            'SELECT id FROM booking_details WHERE booking_code = ? LIMIT 1',
+            [bookingCode],
           )
-
-          if (!existingB1[0]) {
+          if (!existing[0]) {
             await connection.execute(
               `INSERT INTO booking_details 
                 (booking_code, user_id, facility_building_id, booking_date, start_time, end_time, participants, purpose, status, created_at, updated_at)
-               VALUES (?, ?, ?, '2026-10-18', '09:00:00', '12:00:00', 50, 'Municipal Community Hall Public Gathering', 'CONFIRMED', UTC_TIMESTAMP(), UTC_TIMESTAMP())`,
-              [bookingCode1, citizen.id, hallId],
+               VALUES (?, ?, ?, '2026-10-02', '16:00:00', '18:00:00', 22, 'Friendly Community Football Match', 'UPCOMING', UTC_TIMESTAMP(), UTC_TIMESTAMP())`,
+              [bookingCode, citizen.id, groundId],
             )
-            console.log(`  Created booking: ${bookingCode1} for user ${citizen.id}`)
           } else {
             await connection.execute(
               `UPDATE booking_details 
-                  SET user_id = ?, booking_code = ?, status = 'CONFIRMED', booking_date = '2026-10-18', start_time = '09:00:00', end_time = '12:00:00'
+                  SET user_id = ?, facility_building_id = ?, status = 'UPCOMING', booking_date = '2026-10-02', start_time = '16:00:00', end_time = '18:00:00', participants = 22, purpose = 'Friendly Community Football Match'
                 WHERE id = ?`,
-              [citizen.id, bookingCode1, existingB1[0].id],
+              [citizen.id, groundId, existing[0].id],
             )
           }
         }
 
-        // --- BOOKING 2: BK-2026-0012 (Public Sports Ground, 02 Oct 2026, 04:00 PM – 06:00 PM, Completed)
-        if (groundId) {
-          const bookingCode2 = 'BK-2026-0012'
-          const [existingB2] = await connection.execute<RowDataPacket[]>(
-            'SELECT id FROM booking_details WHERE booking_code = ? OR (user_id = ? AND facility_building_id = ? AND booking_date = ?) LIMIT 1',
-            [bookingCode2, citizen.id, groundId, '2026-10-02'],
+        // 2. BK-2026-0018 (Municipal Community Hall, 18 Oct 2026, 09:00 AM – 12:00 PM, CONFIRMED)
+        if (hallId) {
+          const bookingCode = 'BK-2026-0018'
+          const [existing] = await connection.execute<RowDataPacket[]>(
+            'SELECT id FROM booking_details WHERE booking_code = ? LIMIT 1',
+            [bookingCode],
           )
-
-          if (!existingB2[0]) {
+          if (!existing[0]) {
             await connection.execute(
               `INSERT INTO booking_details 
                 (booking_code, user_id, facility_building_id, booking_date, start_time, end_time, participants, purpose, status, created_at, updated_at)
-               VALUES (?, ?, ?, '2026-10-02', '16:00:00', '18:00:00', 22, 'Friendly Community Football Match', 'COMPLETED', UTC_TIMESTAMP(), UTC_TIMESTAMP())`,
-              [bookingCode2, citizen.id, groundId],
+               VALUES (?, ?, ?, '2026-10-18', '09:00:00', '12:00:00', 50, 'Municipal Community Hall Public Gathering', 'CONFIRMED', UTC_TIMESTAMP(), UTC_TIMESTAMP())`,
+              [bookingCode, citizen.id, hallId],
             )
-            console.log(`  Created booking: ${bookingCode2} for user ${citizen.id}`)
           } else {
             await connection.execute(
               `UPDATE booking_details 
-                  SET user_id = ?, booking_code = ?, status = 'COMPLETED', booking_date = '2026-10-02', start_time = '16:00:00', end_time = '18:00:00'
+                  SET user_id = ?, facility_building_id = ?, status = 'CONFIRMED', booking_date = '2026-10-18', start_time = '09:00:00', end_time = '12:00:00', participants = 50, purpose = 'Municipal Community Hall Public Gathering'
                 WHERE id = ?`,
-              [citizen.id, bookingCode2, existingB2[0].id],
+              [citizen.id, hallId, existing[0].id],
+            )
+          }
+        }
+
+        // 3. BK-2026-0012 (Town Hall Auditorium, 05 Sep 2026, 01:00 PM – 04:00 PM, COMPLETED)
+        if (auditoriumId) {
+          const bookingCode = 'BK-2026-0012'
+          const [existing] = await connection.execute<RowDataPacket[]>(
+            'SELECT id FROM booking_details WHERE booking_code = ? LIMIT 1',
+            [bookingCode],
+          )
+          if (!existing[0]) {
+            await connection.execute(
+              `INSERT INTO booking_details 
+                (booking_code, user_id, facility_building_id, booking_date, start_time, end_time, participants, purpose, status, created_at, updated_at)
+               VALUES (?, ?, ?, '2026-09-05', '13:00:00', '16:00:00', 120, 'Cultural Programme', 'COMPLETED', UTC_TIMESTAMP(), UTC_TIMESTAMP())`,
+              [bookingCode, citizen.id, auditoriumId],
+            )
+          } else {
+            await connection.execute(
+              `UPDATE booking_details 
+                  SET user_id = ?, facility_building_id = ?, status = 'COMPLETED', booking_date = '2026-09-05', start_time = '13:00:00', end_time = '16:00:00', participants = 120, purpose = 'Cultural Programme'
+                WHERE id = ?`,
+              [citizen.id, auditoriumId, existing[0].id],
+            )
+          }
+        }
+
+        // 4. BK-2026-0010 (Community Meeting Room, 28 Aug 2026, 10:00 AM – 01:00 PM, CANCELLED)
+        if (meetingRoomId) {
+          const bookingCode = 'BK-2026-0010'
+          const [existing] = await connection.execute<RowDataPacket[]>(
+            'SELECT id FROM booking_details WHERE booking_code = ? LIMIT 1',
+            [bookingCode],
+          )
+          if (!existing[0]) {
+            await connection.execute(
+              `INSERT INTO booking_details 
+                (booking_code, user_id, facility_building_id, booking_date, start_time, end_time, participants, purpose, status, created_at, updated_at)
+               VALUES (?, ?, ?, '2026-08-28', '10:00:00', '13:00:00', 15, 'Resident Association Meeting', 'CANCELLED', UTC_TIMESTAMP(), UTC_TIMESTAMP())`,
+              [bookingCode, citizen.id, meetingRoomId],
+            )
+          } else {
+            await connection.execute(
+              `UPDATE booking_details 
+                  SET user_id = ?, facility_building_id = ?, status = 'CANCELLED', booking_date = '2026-08-28', start_time = '10:00:00', end_time = '13:00:00', participants = 15, purpose = 'Resident Association Meeting'
+                WHERE id = ?`,
+              [citizen.id, meetingRoomId, existing[0].id],
             )
           }
         }
