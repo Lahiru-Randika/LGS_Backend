@@ -1,31 +1,43 @@
 import 'dotenv/config';
 import nodemailer from "nodemailer";
+import type { Transporter } from "nodemailer";
 
-function getTransporter() {
+let cachedTransporter: Transporter | null = null;
+let cachedCredentials = '';
+
+export function getTransporter(): Transporter {
   const host = process.env.SMTP_HOST || "smtp.gmail.com";
   const port = Number(process.env.SMTP_PORT || 465);
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+  const user = process.env.SMTP_USER || "";
+  const pass = process.env.SMTP_PASS || "";
+  const credsKey = `${host}:${port}:${user}:${pass}`;
 
-  if (host.includes("gmail")) {
-    return nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user,
-        pass,
-      },
-    });
+  if (cachedTransporter && cachedCredentials === credsKey) {
+    return cachedTransporter;
   }
 
-  return nodemailer.createTransport({
+  const isSecure = port === 465;
+
+  const transportOptions: any = {
     host,
     port,
-    secure: port === 465,
+    secure: isSecure,
+    pool: true,
+    maxConnections: 3,
+    maxMessages: 100,
+    connectionTimeout: 5000,
+    greetingTimeout: 5000,
+    socketTimeout: 8000,
+    family: 4, // strictly force IPv4 to avoid IPv6 connection stalls
     auth: {
       user,
       pass,
     },
-  });
+  };
+
+  cachedTransporter = nodemailer.createTransport(transportOptions);
+  cachedCredentials = credsKey;
+  return cachedTransporter;
 }
 
 export async function sendContactEmail(data: {
