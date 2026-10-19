@@ -61,6 +61,7 @@ import taxRoutes from './modules/tax/tax.routes'
 import analyticsRoutes from './modules/analytics/analytics.routes'
 import contentRoutes from './modules/content/content.routes'
 import auditRoutes from './modules/audit/audit.routes'
+import contactRoutes from './routes/contact.routes'
 
 import {
   asyncHandler,
@@ -329,6 +330,11 @@ api.use(
 api.use(
   '/audit',
   auditRoutes,
+)
+
+app.use(
+  '/api/v1/contact',
+  contactRoutes,
 )
 
 app.use(
