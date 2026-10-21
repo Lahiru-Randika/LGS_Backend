@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import type { RowDataPacket } from 'mysql2'
+import type { RowDataPacket } from '../../config/db'
 import { z } from 'zod'
 import { pool } from '../../config/db'
 import { authenticate } from '../../middleware/authenticate'
@@ -19,7 +19,7 @@ function rangeWhere(from?: string, to?: string) {
   const where: string[] = ['sr.deleted_at IS NULL']
   const params: any[] = []
   if (from) { where.push('sr.created_at >= ?'); params.push(`${from} 00:00:00`) }
-  if (to) { where.push('sr.created_at < DATE_ADD(?, INTERVAL 1 DAY)'); params.push(`${to} 00:00:00`) }
+  if (to) { where.push('sr.created_at < ?::timestamp + INTERVAL \'1 day\''); params.push(`${to} 00:00:00`) }
   return { where, params }
 }
 
@@ -27,20 +27,20 @@ router.get('/requests/summary', asyncHandler(async (req, res) => {
   const q = rangeSchema.parse(req.query); const r = rangeWhere(q.from, q.to)
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT COUNT(*) AS total,
-            SUM(sr.status IN ('RESOLVED','CLOSED')) AS resolved,
-            SUM(sr.status NOT IN ('RESOLVED','CLOSED','REJECTED','CANCELLED','DUPLICATE')) AS open,
-            AVG(CASE WHEN sr.resolved_at IS NOT NULL THEN TIMESTAMPDIFF(HOUR, sr.created_at, sr.resolved_at) END) AS averageResolutionHours
+            COUNT(*) FILTER (WHERE sr.status IN ('RESOLVED','CLOSED')) AS resolved,
+            COUNT(*) FILTER (WHERE sr.status NOT IN ('RESOLVED','CLOSED','REJECTED','CANCELLED','DUPLICATE')) AS open,
+            AVG(CASE WHEN sr.resolved_at IS NOT NULL THEN (EXTRACT(EPOCH FROM (sr.resolved_at - sr.created_at)) / 3600) END) AS "averageResolutionHours"
        FROM service_requests sr WHERE ${r.where.join(' AND ')}`, r.params)
   return ok(res, rows[0] ?? {})
 }))
 
 router.get('/requests/trend', asyncHandler(async (req, res) => {
   const q = rangeSchema.extend({ bucket: z.enum(['day','month']).default('day') }).parse(req.query); const r = rangeWhere(q.from, q.to)
-  const format = q.bucket === 'month' ? '%Y-%m' : '%Y-%m-%d'
+  const format = q.bucket === 'month' ? 'YYYY-MM' : 'YYYY-MM-DD'
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT DATE_FORMAT(sr.created_at, '${format}') AS period, COUNT(*) AS created,
-            SUM(sr.status IN ('RESOLVED','CLOSED')) AS resolved
-       FROM service_requests sr WHERE ${r.where.join(' AND ')} GROUP BY period ORDER BY period`, r.params)
+    `SELECT TO_CHAR(sr.created_at, '${format}') AS period, COUNT(*) AS created,
+            COUNT(*) FILTER (WHERE sr.status IN ('RESOLVED','CLOSED')) AS resolved
+       FROM service_requests sr WHERE ${r.where.join(' AND ')} GROUP BY TO_CHAR(sr.created_at, '${format}') ORDER BY period`, r.params)
   return ok(res, rows)
 }))
 
@@ -58,22 +58,22 @@ router.get('/requests/by-status', asyncHandler(async (req, res) => {
 
 router.get('/departments', asyncHandler(async (_req, res) => {
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT d.id AS departmentId, d.name,
+    `SELECT d.id AS "departmentId", d.name,
             COUNT(sr.id) AS total,
-            SUM(sr.status IN ('RESOLVED','CLOSED')) AS resolved,
-            SUM(sr.status NOT IN ('RESOLVED','CLOSED','REJECTED','CANCELLED','DUPLICATE')) AS open,
-            AVG(CASE WHEN sr.resolved_at IS NOT NULL THEN TIMESTAMPDIFF(HOUR, sr.created_at, sr.resolved_at) END) AS averageResolutionHours
+            COUNT(sr.id) FILTER (WHERE sr.status IN ('RESOLVED','CLOSED')) AS resolved,
+            COUNT(sr.id) FILTER (WHERE sr.status NOT IN ('RESOLVED','CLOSED','REJECTED','CANCELLED','DUPLICATE')) AS open,
+            AVG(CASE WHEN sr.resolved_at IS NOT NULL THEN (EXTRACT(EPOCH FROM (sr.resolved_at - sr.created_at)) / 3600) END) AS "averageResolutionHours"
        FROM departments d LEFT JOIN service_requests sr ON sr.department_id = d.id AND sr.deleted_at IS NULL
-      WHERE d.active = 1 GROUP BY d.id, d.name ORDER BY d.name`)
+      WHERE d.active = true GROUP BY d.id, d.name ORDER BY d.name`)
   return ok(res, rows)
 }))
 
 router.get('/wards', asyncHandler(async (_req, res) => {
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT w.id AS wardId, w.name, COUNT(sr.id) AS total,
-            SUM(sr.status NOT IN ('RESOLVED','CLOSED','REJECTED','CANCELLED','DUPLICATE')) AS active
+    `SELECT w.id AS "wardId", w.name, COUNT(sr.id) AS total,
+            COUNT(sr.id) FILTER (WHERE sr.status NOT IN ('RESOLVED','CLOSED','REJECTED','CANCELLED','DUPLICATE')) AS active
        FROM wards w LEFT JOIN service_requests sr ON sr.ward_id = w.id AND sr.deleted_at IS NULL
-      WHERE w.active = 1 GROUP BY w.id, w.name ORDER BY w.code`)
+      WHERE w.active = true GROUP BY w.id, w.name ORDER BY w.code`)
   return ok(res, rows)
 }))
 

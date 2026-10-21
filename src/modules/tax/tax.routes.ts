@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import type { RowDataPacket } from 'mysql2/promise'
+import type { RowDataPacket } from '../../config/db'
 import { z } from 'zod'
 
 import { pool } from '../../config/db'
@@ -84,7 +84,7 @@ router.get(
            FROM tax_payments tp
            JOIN tax_assessments ta ON ta.id = tp.tax_assessment_id
           WHERE ta.tax_account_id IN (${placeholders})
-            AND (YEAR(tp.paid_at) = ? OR ta.tax_year = ?)`,
+            AND (EXTRACT(YEAR FROM tp.paid_at) = ? OR ta.tax_year = ?)`,
         [...accountIds, currentYear, currentYear],
       )
       paidThisYear = Number(paidRows[0]?.totalPaid || 0)
@@ -114,11 +114,11 @@ router.get(
       `SELECT
          tp.id,
          tp.payment_reference AS receipt,
-         COALESCE(tp.description, CONCAT('Assessment Tax — Q', QUARTER(tp.paid_at), ' ', YEAR(tp.paid_at))) AS description,
-         DATE_FORMAT(tp.paid_at, '%d %b %Y') AS date,
+         COALESCE(tp.description, CONCAT('Assessment Tax — Q', EXTRACT(QUARTER FROM tp.paid_at), ' ', EXTRACT(YEAR FROM tp.paid_at))) AS description,
+         TO_CHAR(tp.paid_at, 'DD Mon YYYY') AS date,
          tp.paid_at AS rawDate,
          tp.amount,
-         CONCAT('LKR ', FORMAT(tp.amount, 2)) AS amountFormatted,
+         CONCAT('LKR ', TO_CHAR(tp.amount, 'FM999,999,999,990.00')) AS amountFormatted,
          COALESCE(tp.status, 'COMPLETED') AS status,
          COALESCE(tp.payment_method, 'ONLINE') AS paymentMethod,
          tc.tax_code AS taxCode,
@@ -141,11 +141,11 @@ router.get(
         `SELECT
            tp.id,
            tp.payment_reference AS receipt,
-           COALESCE(tp.description, CONCAT('Assessment Tax — Q', QUARTER(tp.paid_at), ' ', YEAR(tp.paid_at))) AS description,
-           DATE_FORMAT(tp.paid_at, '%d %b %Y') AS date,
+           COALESCE(tp.description, CONCAT('Assessment Tax — Q', EXTRACT(QUARTER FROM tp.paid_at), ' ', EXTRACT(YEAR FROM tp.paid_at))) AS description,
+           TO_CHAR(tp.paid_at, 'DD Mon YYYY') AS date,
            tp.paid_at AS rawDate,
            tp.amount,
-           CONCAT('LKR ', FORMAT(tp.amount, 2)) AS amountFormatted,
+           CONCAT('LKR ', TO_CHAR(tp.amount, 'FM999,999,999,990.00')) AS amountFormatted,
            COALESCE(tp.status, 'COMPLETED') AS status,
            COALESCE(tp.payment_method, 'ONLINE') AS paymentMethod,
            tc.tax_code AS taxCode,
@@ -202,7 +202,7 @@ router.post(
     // Generate receipt reference: TX-YYYY-XXXX
     const year = new Date().getUTCFullYear()
     const [seqRows] = await pool.execute<RowDataPacket[]>(
-      'SELECT COUNT(*) AS total FROM tax_payments WHERE YEAR(paid_at) = ?',
+      'SELECT COUNT(*) AS total FROM tax_payments WHERE EXTRACT(YEAR FROM paid_at) = ?',
       [year],
     )
     const nextSeq = Number(seqRows[0]?.total || 0) + 1045
@@ -348,7 +348,7 @@ router.get(
     const [rows] = await pool.execute<RowDataPacket[]>(
       `
       SELECT
-        DATE_FORMAT(tp.paid_at, '%Y-%m') AS month,
+        TO_CHAR(tp.paid_at, 'YYYY-MM') AS month,
         SUM(tp.amount) AS collected
       FROM tax_payments tp
       JOIN tax_assessments ta
@@ -356,7 +356,7 @@ router.get(
       WHERE
         ta.tax_year = ?
       GROUP BY
-        DATE_FORMAT(tp.paid_at, '%Y-%m')
+        TO_CHAR(tp.paid_at, 'YYYY-MM')
       ORDER BY
         month
       `,
@@ -390,8 +390,8 @@ router.get(
     const [rows] = await pool.execute<RowDataPacket[]>(
       `
       SELECT
-        w.id AS wardId,
-        w.name AS wardName,
+        w.id AS "wardId",
+        w.name AS "wardName",
         SUM(ta.assessed_amount) AS assessed,
         SUM(ta.amount_due) AS outstanding
       FROM tax_assessments ta
@@ -432,14 +432,14 @@ router.get(
     const [rows] = await pool.execute<RowDataPacket[]>(
       `
       SELECT
-        b.building_code AS buildingCode,
-        COALESCE(b.resolved_name, b.name) AS buildingName,
-        p.property_code AS propertyCode,
-        p.assessment_value AS assessmentValue,
-        p.valuation_date AS valuationDate,
-        tc.tax_code AS taxCode,
-        tc.status AS taxStatus,
-        tc.current_balance AS currentBalance
+        b.building_code AS "buildingCode",
+        COALESCE(b.resolved_name, b.name) AS "buildingName",
+        p.property_code AS "propertyCode",
+        p.assessment_value AS "assessmentValue",
+        p.valuation_date AS "valuationDate",
+        tc.tax_code AS "taxCode",
+        tc.status AS "taxStatus",
+        tc.current_balance AS "currentBalance"
       FROM buildings b
       JOIN properties p
         ON p.building_id = b.id

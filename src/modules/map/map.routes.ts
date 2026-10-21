@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { Router } from 'express'
-import type { RowDataPacket } from 'mysql2'
+import type { RowDataPacket } from '../../config/db'
 import { z } from 'zod'
 import { pool, withTransaction } from '../../config/db'
 import { env } from '../../config/env'
@@ -26,8 +26,8 @@ function geometryCenter(geometry: any): { latitude: number; longitude: number } 
 
 router.get('/config', optionalAuthenticate, asyncHandler(async (_req, res) => {
   const [sources] = await pool.execute<RowDataPacket[]>(
-    `SELECT code, label, source_type AS sourceType, provider, proxy_url AS url, min_zoom AS minZoom, max_zoom AS maxZoom,
-            bounds_north AS boundsNorth, bounds_south AS boundsSouth, bounds_east AS boundsEast, bounds_west AS boundsWest
+    `SELECT code, label, source_type AS "sourceType", provider, proxy_url AS url, min_zoom AS "minZoom", max_zoom AS "maxZoom",
+            bounds_north AS "boundsNorth", bounds_south AS "boundsSouth", bounds_east AS "boundsEast", bounds_west AS "boundsWest"
        FROM map_sources WHERE enabled = 1 ORDER BY sort_order, id`)
   return ok(res, { center: { latitude: 6.90734, longitude: 79.86237 }, defaultZoom: 16, layers: sources })
 }))
@@ -84,8 +84,9 @@ router.post('/buildings/:featureId/resolve', authenticate, requirePermission('bu
       `UPDATE buildings SET resolved_name = ?, address = COALESCE(address, ?), name_match_status = 'POLYGON_VERIFIED', osm_type = ?, osm_id = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?`,
       [match.name, match.address || null, match.osmType || null, match.osmId || null, building.id])
     await connection.execute(
-      `INSERT IGNORE INTO building_aliases (building_id, name, source, confidence, is_primary, created_at)
-       VALUES (?, ?, 'OSM', 'POLYGON_VERIFIED', 1, UTC_TIMESTAMP())`, [building.id, match.name])
+      `INSERT INTO building_aliases (building_id, name, source, confidence, is_primary, created_at)
+       VALUES (?, ?, 'OSM', 'POLYGON_VERIFIED', true, CURRENT_TIMESTAMP)
+       ON CONFLICT (building_id, name) DO NOTHING`, [building.id, match.name])
     await writeAudit({ actorUserId: req.authUser!.id, action: 'BUILDING_NAME_RESOLVED', entityType: 'BUILDING', entityId: building.building_code, afterData: match, ipAddress: req.ip, userAgent: req.get('user-agent'), requestId: req.requestId }, connection)
   })
   return ok(res, { ...match, buildingCode: building.building_code, cached: false })

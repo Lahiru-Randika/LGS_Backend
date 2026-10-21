@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { Router } from 'express'
-import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise'
+import type { ResultSetHeader, RowDataPacket } from '../../config/db'
 import { z } from 'zod'
 
 import { pool, withTransaction } from '../../config/db'
@@ -73,29 +73,29 @@ router.get(
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT
          bd.id AS idNum,
-         COALESCE(bd.booking_code, sr.request_code, CONCAT('BK-', LPAD(bd.id, 4, '0'))) AS id,
-         COALESCE(bd.booking_code, sr.request_code, CONCAT('BK-', LPAD(bd.id, 4, '0'))) AS bookingCode,
+         COALESCE(bd.booking_code, sr.request_code, CONCAT('BK-', LPAD(bd.id::text, 4, '0'))) AS id,
+         COALESCE(bd.booking_code, sr.request_code, CONCAT('BK-', LPAD(bd.id::text, 4, '0'))) AS bookingCode,
          COALESCE(b.resolved_name, b.name, 'Municipal Facility') AS facility,
          COALESCE(b.resolved_name, b.name, 'Municipal Facility') AS facilityName,
          b.id AS facilityBuildingId,
          b.id AS facilityId,
          b.building_code AS facilityCode,
          COALESCE(b.address, 'Colombo Municipal Council') AS location,
-         DATE_FORMAT(bd.booking_date, '%d %b %Y') AS date,
-         DATE_FORMAT(bd.booking_date, '%Y-%m-%d') AS dateIso,
+         TO_CHAR(bd.booking_date, 'DD Mon YYYY') AS date,
+         TO_CHAR(bd.booking_date, 'YYYY-MM-DD') AS dateIso,
          bd.booking_date AS rawDate,
          CASE
            WHEN bd.start_time IS NOT NULL AND bd.end_time IS NOT NULL THEN
-             CONCAT(TIME_FORMAT(bd.start_time, '%h:%i %p'), ' – ', TIME_FORMAT(bd.end_time, '%h:%i %p'))
+             CONCAT(TO_CHAR(bd.start_time, 'HH12:MI AM'), ' – ', TO_CHAR(bd.end_time, 'HH12:MI AM'))
            WHEN bd.start_time IS NOT NULL THEN
-             TIME_FORMAT(bd.start_time, '%h:%i %p')
+             TO_CHAR(bd.start_time, 'HH12:MI AM')
            ELSE
              'Full Day'
          END AS time,
-         TIME_FORMAT(bd.start_time, '%h:%i %p') AS startTime,
-         TIME_FORMAT(bd.end_time, '%h:%i %p') AS endTime,
-         TIME_FORMAT(bd.start_time, '%H:%i') AS rawStartTime,
-         TIME_FORMAT(bd.end_time, '%H:%i') AS rawEndTime,
+         TO_CHAR(bd.start_time, 'HH12:MI AM') AS startTime,
+         TO_CHAR(bd.end_time, 'HH12:MI AM') AS endTime,
+         TO_CHAR(bd.start_time, 'HH24:MI') AS rawStartTime,
+         TO_CHAR(bd.end_time, 'HH24:MI') AS rawEndTime,
          bd.participants,
          bd.purpose,
          COALESCE(bd.status, 'PENDING') AS status,
@@ -148,12 +148,12 @@ router.get(
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT
          bd.id,
-         COALESCE(bd.booking_code, sr.request_code, CONCAT('BK-', LPAD(bd.id, 4, '0'))) AS bookingCode,
-         TIME_FORMAT(bd.start_time, '%H:%i') AS startTime,
-         TIME_FORMAT(bd.end_time, '%H:%i') AS endTime,
-         TIME_FORMAT(bd.start_time, '%h:%i %p') AS startTimeFormatted,
-         TIME_FORMAT(bd.end_time, '%h:%i %p') AS endTimeFormatted,
-         CONCAT(TIME_FORMAT(bd.start_time, '%h:%i %p'), ' – ', TIME_FORMAT(bd.end_time, '%h:%i %p')) AS timeFormatted,
+         COALESCE(bd.booking_code, sr.request_code, CONCAT('BK-', LPAD(bd.id::text, 4, '0'))) AS bookingCode,
+         TO_CHAR(bd.start_time, 'HH24:MI') AS startTime,
+         TO_CHAR(bd.end_time, 'HH24:MI') AS endTime,
+         TO_CHAR(bd.start_time, 'HH12:MI AM') AS startTimeFormatted,
+         TO_CHAR(bd.end_time, 'HH12:MI AM') AS endTimeFormatted,
+         CONCAT(TO_CHAR(bd.start_time, 'HH12:MI AM'), ' – ', TO_CHAR(bd.end_time, 'HH12:MI AM')) AS timeFormatted,
          COALESCE(bd.status, 'CONFIRMED') AS status,
          bd.purpose
        FROM booking_details bd
@@ -186,8 +186,8 @@ router.get(
          COALESCE(b.resolved_name, b.name) AS name,
          COALESCE(b.address, 'Colombo Municipal Council') AS address,
          p.capacity,
-         TIME_FORMAT(p.opening_time, '%h:%i %p') AS openingTime,
-         TIME_FORMAT(p.closing_time, '%h:%i %p') AS closingTime,
+         TO_CHAR(p.opening_time, 'HH12:MI AM') AS openingTime,
+         TO_CHAR(p.closing_time, 'HH12:MI AM') AS closingTime,
          p.description
        FROM buildings b
        JOIN public_facility_profiles p ON p.building_id = b.id AND p.active = 1
@@ -291,10 +291,10 @@ router.post(
       // 2. Collision check inside transaction with row lock
       const [collisions] = await connection.execute<RowDataPacket[]>(
         `SELECT bd.id,
-                COALESCE(bd.booking_code, CONCAT('BK-', LPAD(bd.id, 4, '0'))) AS bookingCode,
+                COALESCE(bd.booking_code, CONCAT('BK-', LPAD(bd.id::text, 4, '0'))) AS bookingCode,
                 COALESCE(b.resolved_name, b.name) AS facilityName,
-                TIME_FORMAT(bd.start_time, '%h:%i %p') AS startFormatted,
-                TIME_FORMAT(bd.end_time, '%h:%i %p') AS endFormatted
+                TO_CHAR(bd.start_time, 'HH12:MI AM') AS startFormatted,
+                TO_CHAR(bd.end_time, 'HH12:MI AM') AS endFormatted
            FROM booking_details bd
            JOIN buildings b ON b.id = bd.facility_building_id
           WHERE bd.facility_building_id = ?
@@ -319,7 +319,8 @@ router.post(
       const [result] = await connection.execute<ResultSetHeader>(
         `INSERT INTO booking_details
           (booking_code, user_id, facility_building_id, booking_date, start_time, end_time, participants, purpose, status, created_at, updated_at)
-         VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, 'CONFIRMED', UTC_TIMESTAMP(), UTC_TIMESTAMP())`,
+         VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, 'CONFIRMED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+         RETURNING id`,
         [
           req.authUser!.id,
           facilityId,
@@ -345,7 +346,7 @@ router.post(
           )
           break
         } catch (err: any) {
-          if (err?.code === 'ER_DUP_ENTRY' && attempts < 4) {
+          if ((err?.code === 'ER_DUP_ENTRY' || err?.code === '23505') && attempts < 4) {
             attempts++
             code = `BK-${year}-${String(insertId + 20 + attempts).padStart(4, '0')}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`
           } else {

@@ -1,131 +1,95 @@
 import 'dotenv/config'
-
 import fs from 'node:fs'
 import path from 'node:path'
-import mysql from 'mysql2/promise'
+import { Client } from 'pg'
 
 function getSslConfig() {
-  const enabled =
-    process.env.DB_SSL?.toLowerCase() === 'true'
-
+  const enabled = process.env.DB_SSL?.toLowerCase() === 'true'
   if (!enabled) {
     return undefined
   }
 
-  const caPath =
-    process.env.DB_SSL_CA_PATH
-
+  const caPath = process.env.DB_SSL_CA_PATH
   if (!caPath) {
-    throw new Error(
-      'DB_SSL=true but DB_SSL_CA_PATH is not configured',
-    )
+    throw new Error('DB_SSL=true but DB_SSL_CA_PATH is not configured')
   }
 
-  const absoluteCaPath =
-    path.resolve(
-      process.cwd(),
-      caPath,
-    )
-
-  if (
-    !fs.existsSync(
-      absoluteCaPath,
-    )
-  ) {
-    throw new Error(
-      `Database CA certificate not found: ${absoluteCaPath}`,
-    )
+  const absoluteCaPath = path.resolve(process.cwd(), caPath)
+  if (!fs.existsSync(absoluteCaPath)) {
+    throw new Error(`Database CA certificate not found: ${absoluteCaPath}`)
   }
 
   return {
-    ca: fs.readFileSync(
-      absoluteCaPath,
-      'utf8',
-    ),
-
+    ca: fs.readFileSync(absoluteCaPath, 'utf8'),
     rejectUnauthorized: true,
   }
 }
 
 async function main() {
-  const databaseUrl =
-    process.env.DATABASE_URL
-
+  const databaseUrl = process.env.DATABASE_URL
   if (!databaseUrl) {
-    throw new Error(
-      'DATABASE_URL is required',
-    )
+    throw new Error('DATABASE_URL is required')
   }
 
-  const url =
-    new URL(databaseUrl)
-
-  const databaseName =
-    url.pathname.replace(
-      /^\//,
-      '',
-    )
-
+  const url = new URL(databaseUrl)
+  const databaseName = url.pathname.replace(/^\//, '')
   if (!databaseName) {
-    throw new Error(
-      'DATABASE_URL must contain a database name',
-    )
+    throw new Error('DATABASE_URL must contain a database name')
   }
 
   /*
-    Connect without selecting the database first.
-
-    This allows CREATE DATABASE to work when using
-    MySQL servers that permit database creation.
+    Connect to administrative default database (postgres) to check and create
+    the target database if server permissions permit.
   */
-  const connection =
-    await mysql.createConnection({
-      host: url.hostname,
-
-      port:
-        Number(url.port) ||
-        3306,
-
-      user:
-        decodeURIComponent(
-          url.username,
-        ),
-
-      password:
-        decodeURIComponent(
-          url.password,
-        ),
-
-      ssl:
-        getSslConfig(),
-
-      connectTimeout:
-        15000,
-    })
+  const adminDb = 'postgres'
+  const client = new Client({
+    host: url.hostname,
+    port: Number(url.port) || 5432,
+    user: decodeURIComponent(url.username),
+    password: decodeURIComponent(url.password),
+    database: adminDb,
+    ssl: getSslConfig(),
+    connectionTimeoutMillis: 15_000,
+  })
 
   try {
-    await connection.query(
-      `CREATE DATABASE IF NOT EXISTS \`${databaseName.replace(
-        /`/g,
-        '``',
-      )}\`
-       CHARACTER SET utf8mb4
-       COLLATE utf8mb4_unicode_ci`,
+    await client.connect()
+
+    const checkRes = await client.query(
+      'SELECT 1 FROM pg_database WHERE datname = $1',
+      [databaseName],
     )
 
-    console.log(
-      `Database "${databaseName}" is ready.`,
-    )
+    if (checkRes.rowCount && checkRes.rowCount > 0) {
+      console.log(`Database "${databaseName}" already exists.`)
+    } else {
+      // Escape double quotes for identifier safety
+      const safeDbName = databaseName.replace(/"/g, '""')
+      await client.query(`CREATE DATABASE "${safeDbName}" WITH ENCODING 'UTF8'`)
+      console.log(`Database "${databaseName}" created successfully.`)
+    }
+  } catch (error: any) {
+    // If user has no permission to connect to 'postgres' or create database,
+    // as is common in DigitalOcean Managed PostgreSQL:
+    if (error?.code === '42501' || error?.message?.includes('permission denied')) {
+      console.log(
+        `Note: Managed PostgreSQL user cannot create databases directly. ` +
+        `Ensure database "${databaseName}" is created in your cloud console. Continuing...`,
+      )
+    } else {
+      console.warn(`Database creation note (${error?.code || 'info'}): ${error?.message}`)
+      console.log(`Proceeding on assumption database "${databaseName}" is pre-created in console.`)
+    }
   } finally {
-    await connection.end()
+    try {
+      await client.end()
+    } catch {
+      // ignore
+    }
   }
 }
 
 main().catch((error) => {
-  console.error(
-    'Database creation failed:',
-    error,
-  )
-
+  console.error('Database creation script failed:', error)
   process.exit(1)
 })

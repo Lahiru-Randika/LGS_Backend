@@ -1,128 +1,59 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-
-import mysql, {
-  type RowDataPacket,
-} from 'mysql2/promise'
-
-import {
-  getDatabaseSslConfig,
-  parseDatabaseUrl,
-} from '../src/config/db'
-
-interface MigrationRow
-  extends RowDataPacket {
-  name: string
-}
+import { Client } from 'pg'
+import { getDatabaseSslConfig, parseDatabaseUrl } from '../src/config/db'
 
 async function main() {
-  const db =
-    parseDatabaseUrl()
+  const db = parseDatabaseUrl()
 
-  console.log(
-    `Connecting to MySQL ${db.host}:${db.port}/${db.database}...`,
-  )
+  console.log(`Connecting to PostgreSQL ${db.host}:${db.port}/${db.database}...`)
 
-  const connection =
-    await mysql.createConnection({
-      host:
-        db.host,
+  const client = new Client({
+    host: db.host,
+    port: db.port,
+    user: db.user,
+    password: db.password,
+    database: db.database,
+    ssl: getDatabaseSslConfig(),
+    connectionTimeoutMillis: 15_000,
+  })
 
-      port:
-        db.port,
-
-      user:
-        db.user,
-
-      password:
-        db.password,
-
-      database:
-        db.database,
-
-      /*
-        Use exactly the same verified Aiven TLS configuration
-        as the normal application connection pool.
-      */
-      ssl:
-        getDatabaseSslConfig(),
-
-      multipleStatements:
-        true,
-
-      connectTimeout:
-        15_000,
-    })
+  await client.connect()
 
   try {
-    console.log(
-      'Secure database connection established.',
-    )
+    console.log('Secure database connection established.')
 
     /* =====================================================
        MIGRATION HISTORY TABLE
     ====================================================== */
 
-    await connection.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
         name VARCHAR(255) NOT NULL PRIMARY KEY,
-        applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )
-      ENGINE=InnoDB
-      DEFAULT CHARSET=utf8mb4
-      COLLATE=utf8mb4_0900_ai_ci
+        applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
     `)
 
     /* =====================================================
        FIND ALREADY APPLIED MIGRATIONS
     ====================================================== */
 
-    const [
-      appliedRows,
-    ] =
-      await connection.query<
-        MigrationRow[]
-      >(
-        'SELECT name FROM schema_migrations ORDER BY name',
-      )
-
-    const applied =
-      new Set(
-        appliedRows.map(
-          (row) =>
-            row.name,
-        ),
-      )
+    const appliedRes = await client.query<{ name: string }>(
+      'SELECT name FROM schema_migrations ORDER BY name'
+    )
+    const applied = new Set(appliedRes.rows.map((row) => row.name))
 
     /* =====================================================
        READ MIGRATION FILES
     ====================================================== */
 
-    const migrationsDir =
-      path.resolve(
-        process.cwd(),
-        'migrations',
-      )
-
-    const files =
-      (
-        await fs.readdir(
-          migrationsDir,
-        )
-      )
-        .filter(
-          (name) =>
-            name.endsWith(
-              '.sql',
-            ),
-        )
-        .sort()
+    const migrationsDir = path.resolve(process.cwd(), 'migrations')
+    const files = (await fs.readdir(migrationsDir))
+      .filter((name) => name.endsWith('.sql'))
+      .sort()
 
     if (!files.length) {
-      console.log(
-        'No migration files found.',
-      )
-
+      console.log('No migration files found.')
       return
     }
 
@@ -130,73 +61,34 @@ async function main() {
        APPLY MIGRATIONS
     ====================================================== */
 
-    for (
-      const name of files
-    ) {
-      if (
-        applied.has(name)
-      ) {
-        console.log(
-          `skip  ${name}`,
-        )
-
+    for (const name of files) {
+      if (applied.has(name)) {
+        console.log(`skip  ${name}`)
         continue
       }
 
-      console.log(
-        `apply ${name}`,
+      console.log(`apply ${name}`)
+      const filePath = path.join(migrationsDir, name)
+      const sql = await fs.readFile(filePath, 'utf8')
+
+      // Execute migration file
+      await client.query(sql)
+
+      await client.query(
+        `INSERT INTO schema_migrations (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`,
+        [name]
       )
 
-      const filePath =
-        path.join(
-          migrationsDir,
-          name,
-        )
-
-      const sql =
-        await fs.readFile(
-          filePath,
-          'utf8',
-        )
-
-      /*
-        Individual migration files may contain multiple SQL
-        statements. multipleStatements=true is enabled only
-        for this trusted local migration runner.
-      */
-      await connection.query(
-        sql,
-      )
-
-      await connection.execute(
-        `
-          INSERT INTO schema_migrations
-            (name)
-          VALUES (?)
-        `,
-        [name],
-      )
-
-      console.log(
-        `done  ${name}`,
-      )
+      console.log(`done  ${name}`)
     }
 
-    console.log(
-      'Migrations complete.',
-    )
+    console.log('Migrations complete.')
   } finally {
-    await connection.end()
+    await client.end()
   }
 }
 
-main().catch(
-  (error) => {
-    console.error(
-      'Migration failed:',
-      error,
-    )
-
-    process.exit(1)
-  },
-)
+main().catch((error) => {
+  console.error('Migration failed:', error)
+  process.exit(1)
+})

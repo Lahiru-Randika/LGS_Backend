@@ -5,7 +5,7 @@ import {
 import type {
   ResultSetHeader,
   RowDataPacket,
-} from 'mysql2/promise'
+} from '../../config/db'
 
 import {
   z,
@@ -198,9 +198,9 @@ router.get(
 
             OR b.address LIKE ?
 
-            OR CAST(b.latitude AS CHAR) LIKE ?
+            OR CAST(b.latitude AS TEXT) LIKE ?
 
-            OR CAST(b.longitude AS CHAR) LIKE ?
+            OR CAST(b.longitude AS TEXT) LIKE ?
 
             OR EXISTS (
               SELECT 1
@@ -275,7 +275,7 @@ router.get(
           undefined
 
       let distanceSql =
-        'NULL AS distanceMeters'
+        'NULL AS "distanceMeters"'
 
       if (
         hasCoordinates
@@ -342,7 +342,7 @@ router.get(
           These params belong to SELECT.
         */
         distanceSql =
-          `${distanceExpression} AS distanceMeters`
+          `${distanceExpression} AS "distanceMeters"`
 
         /*
           Radius filter repeats the same expression.
@@ -421,45 +421,45 @@ router.get(
           `
           SELECT
             b.building_code
-              AS buildingCode,
+              AS "buildingCode",
 
             b.external_source
-              AS externalSource,
+              AS "externalSource",
 
             b.external_feature_id
-              AS externalFeatureId,
+              AS "externalFeatureId",
 
             b.name,
 
             b.resolved_name
-              AS resolvedName,
+              AS "resolvedName",
 
             b.address,
 
             b.building_type
-              AS buildingType,
+              AS "buildingType",
 
             b.public_facility
-              AS publicFacility,
+              AS "publicFacility",
 
             b.latitude,
 
             b.longitude,
 
             b.name_match_status
-              AS nameMatchStatus,
+              AS "nameMatchStatus",
 
             b.osm_type
-              AS osmType,
+              AS "osmType",
 
             b.osm_id
-              AS osmId,
+              AS "osmId",
 
             w.id
-              AS wardId,
+              AS "wardId",
 
             w.name
-              AS wardName,
+              AS "wardName",
 
             (
               SELECT COUNT(*)
@@ -468,12 +468,12 @@ router.get(
                 sr.building_id = b.id
                 AND sr.deleted_at IS NULL
             )
-              AS requestCount,
+              AS "requestCount",
 
             ${distanceSql},
 
             b.updated_at
-              AS updatedAt
+              AS "updatedAt"
 
           FROM buildings b
 
@@ -643,9 +643,9 @@ router.get(
             source,
             confidence,
             is_primary
-              AS isPrimary,
+              AS "isPrimary",
             created_at
-              AS createdAt
+              AS "createdAt"
 
           FROM building_aliases
 
@@ -1092,6 +1092,7 @@ router.post(
             ?,
             UTC_TIMESTAMP()
           )
+          RETURNING id
           `,
           [
             buildings[0]

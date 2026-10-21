@@ -1,8 +1,8 @@
 import crypto from 'node:crypto'
 import argon2 from 'argon2'
 import { Router } from 'express'
-import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise'
 import { z } from 'zod'
+import type { ResultSetHeader, RowDataPacket } from '../../config/db'
 import { pool, withTransaction } from '../../config/db'
 import { env } from '../../config/env'
 import { authenticate, extractToken, invalidateSessionCache, invalidateUserSessionCache } from '../../middleware/authenticate'
@@ -71,7 +71,7 @@ async function createSession(userId: number, req: any, res: any): Promise<string
   const hash = tokenHash(token)
   await pool.execute(
     `INSERT INTO user_sessions (user_id, token_hash, ip_address, user_agent, expires_at, created_at)
-     VALUES (?, ?, ?, ?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? HOUR), UTC_TIMESTAMP())`,
+     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP + (? * INTERVAL '1 hour'), CURRENT_TIMESTAMP)`,
     [userId, hash, req.ip ?? null, req.get('user-agent')?.slice(0, 500) ?? null, env.SESSION_TTL_HOURS],
   )
   res.cookie(env.SESSION_COOKIE_NAME, token, cookieOptions())
@@ -105,7 +105,8 @@ router.post('/register', loginRateLimit, asyncHandler(async (req, res) => {
   const [result] = await pool.execute<ResultSetHeader>(
     `INSERT INTO users
       (public_id, first_name, last_name, display_name, email, password_hash, role_id, status, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', UTC_TIMESTAMP())`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', CURRENT_TIMESTAMP)
+     RETURNING id`,
     [publicId, input.firstName, input.lastName, displayName, input.email, passwordHash, roleId],
   )
 
@@ -150,7 +151,7 @@ router.post('/login', loginRateLimit, asyncHandler(async (req, res) => {
     await pool.execute(
       `UPDATE users
           SET failed_login_attempts = ?,
-              locked_until = CASE WHEN ? = 1 THEN DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? MINUTE) ELSE NULL END
+              locked_until = CASE WHEN ? = 1 THEN CURRENT_TIMESTAMP + (? * INTERVAL '1 minute') ELSE NULL END
         WHERE id = ?`,
       [lock ? 0 : attempts, lock ? 1 : 0, env.LOGIN_LOCK_MINUTES, user.id],
     )
@@ -203,7 +204,7 @@ router.post('/refresh', authenticate, asyncHandler(async (req, res) => {
   // becomes active again. Screen lock/sleep therefore does not force login.
   await pool.execute(
     `UPDATE user_sessions
-        SET expires_at = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? HOUR)
+        SET expires_at = CURRENT_TIMESTAMP + (? * INTERVAL '1 hour')
       WHERE token_hash = ? AND revoked_at IS NULL`,
     [env.SESSION_TTL_HOURS, req.authSessionHash],
   )
@@ -246,7 +247,7 @@ router.post('/forgot-password', loginRateLimit, asyncHandler(async (req, res) =>
       await connection.execute('UPDATE password_reset_tokens SET used_at = UTC_TIMESTAMP() WHERE user_id = ? AND used_at IS NULL', [rows[0].id])
       await connection.execute(
         `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, created_at)
-         VALUES (?, ?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 30 MINUTE), UTC_TIMESTAMP())`, [rows[0].id, tokenHash(token!)])
+         VALUES (?, ?, CURRENT_TIMESTAMP + (30 * INTERVAL '1 minute'), CURRENT_TIMESTAMP)`, [rows[0].id, tokenHash(token!)])
       await writeAudit({ actorUserId: rows[0].id, action: 'PASSWORD_RESET_REQUESTED', entityType: 'USER', entityId: rows[0].public_id, ipAddress: req.ip, userAgent: req.get('user-agent'), requestId: req.requestId }, connection)
     })
   }
@@ -331,7 +332,8 @@ router.post('/invitations/:token/accept', loginRateLimit, asyncHandler(async (re
     const [result] = await connection.execute<ResultSetHeader>(
       `INSERT INTO users
        (public_id, first_name, last_name, display_name, email, password_hash, role_id, department_id, status, email_verified_at, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', UTC_TIMESTAMP(), ?, UTC_TIMESTAMP())`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)
+       RETURNING id`,
       [userPublicId, invite.first_name, invite.last_name, displayName, invite.email, passwordHash, invite.role_id, invite.department_id, invite.invited_by_user_id],
     )
     await connection.execute('UPDATE government_user_invitations SET accepted_at = UTC_TIMESTAMP() WHERE id = ?', [invite.id])

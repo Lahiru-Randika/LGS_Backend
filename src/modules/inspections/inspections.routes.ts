@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { Router } from 'express'
-import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise'
+import type { ResultSetHeader, RowDataPacket } from '../../config/db'
 import { z } from 'zod'
 
 import { pool, withTransaction } from '../../config/db'
@@ -375,17 +375,17 @@ router.get(
         SELECT
           i.public_id AS id,
           i.status,
-          i.scheduled_for AS scheduledFor,
-          i.started_at AS startedAt,
-          i.completed_at AS completedAt,
-          i.start_latitude AS startLatitude,
-          i.start_longitude AS startLongitude,
-          i.checked_in_at AS checkedInAt,
+          i.scheduled_for AS "scheduledFor",
+          i.started_at AS "startedAt",
+          i.completed_at AS "completedAt",
+          i.start_latitude AS "startLatitude",
+          i.start_longitude AS "startLongitude",
+          i.checked_in_at AS "checkedInAt",
           i.summary,
-          u.public_id AS officerId,
-          u.display_name AS officerName,
-          i.created_at AS createdAt,
-          i.updated_at AS updatedAt
+          u.public_id AS "officerId",
+          u.display_name AS "officerName",
+          i.created_at AS "createdAt",
+          i.updated_at AS "updatedAt"
         FROM inspections i
         JOIN users u
           ON u.id = i.officer_user_id

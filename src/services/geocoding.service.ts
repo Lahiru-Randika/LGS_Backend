@@ -1,5 +1,5 @@
 import crypto from 'node:crypto'
-import type { RowDataPacket } from 'mysql2'
+import type { RowDataPacket } from '../config/db'
 import { pool } from '../config/db'
 import { env } from '../config/env'
 
@@ -15,7 +15,7 @@ function cacheKey(prefix: string, payload: string) {
 
 async function cacheGet<T>(key: string): Promise<T | null> {
   const [rows] = await pool.execute<CacheRow[]>(
-    'SELECT response_json FROM geocode_cache WHERE cache_key = ? AND expires_at > UTC_TIMESTAMP() LIMIT 1', [key])
+    'SELECT response_json FROM geocode_cache WHERE cache_key = ? AND expires_at > CURRENT_TIMESTAMP LIMIT 1', [key])
   if (!rows[0]) return null
   const value = rows[0].response_json
   return (typeof value === 'string' ? JSON.parse(value) : value) as T
@@ -24,8 +24,8 @@ async function cacheGet<T>(key: string): Promise<T | null> {
 async function cachePut(key: string, query: string, provider: string, value: unknown, ttlHours = 168) {
   await pool.execute(
     `INSERT INTO geocode_cache (cache_key, query_text, provider, response_json, expires_at, created_at, updated_at)
-     VALUES (?, ?, ?, ?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? HOUR), UTC_TIMESTAMP(), UTC_TIMESTAMP())
-     ON DUPLICATE KEY UPDATE response_json = VALUES(response_json), expires_at = VALUES(expires_at), updated_at = UTC_TIMESTAMP()`,
+     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP + (? * INTERVAL '1 hour'), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+     ON CONFLICT (cache_key) DO UPDATE SET response_json = EXCLUDED.response_json, expires_at = EXCLUDED.expires_at, updated_at = CURRENT_TIMESTAMP`,
     [key, query.slice(0, 1000), provider, JSON.stringify(value), ttlHours],
   )
 }

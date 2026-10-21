@@ -26,4 +26,5 @@ AND NOT EXISTS (
     WHERE
         rp.role_id = r.id
         AND rp.permission_id = p.id
-);
+)
+ON CONFLICT (role_id, permission_id) DO NOTHING;

@@ -1,6 +1,5 @@
 import crypto from 'node:crypto'
-import type { PoolConnection } from 'mysql2/promise'
-
+import type { PoolConnection } from '../config/db'
 import { pool } from '../config/db'
 
 export type NotificationTone =

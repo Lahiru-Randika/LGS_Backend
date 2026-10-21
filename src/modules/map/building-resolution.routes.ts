@@ -7,7 +7,7 @@ import {
 import type {
   PoolConnection,
   RowDataPacket,
-} from 'mysql2/promise'
+} from '../../config/db'
 
 import {
   z,
@@ -432,30 +432,30 @@ const buildingSelect =
     b.id,
 
     b.building_code
-      AS buildingCode,
+      AS "buildingCode",
 
     b.external_feature_id
-      AS externalFeatureId,
+      AS "externalFeatureId",
 
     b.name,
 
     b.resolved_name
-      AS resolvedName,
+      AS "resolvedName",
 
     b.address,
 
     b.building_type
-      AS buildingType,
+      AS "buildingType",
 
     b.latitude,
 
     b.longitude,
 
     b.geometry_json
-      AS geometryJson,
+      AS "geometryJson",
 
     b.name_match_status
-      AS nameMatchStatus
+      AS "nameMatchStatus"
 
   FROM buildings b
   `
@@ -664,13 +664,13 @@ async function readBuilding(
       `
       SELECT
         b.building_code
-          AS buildingCode,
+          AS "buildingCode",
 
         b.external_source
-          AS externalSource,
+          AS "externalSource",
 
         b.external_feature_id
-          AS externalFeatureId,
+          AS "externalFeatureId",
 
         COALESCE(
           b.resolved_name,
@@ -680,22 +680,22 @@ async function readBuilding(
           AS name,
 
         b.resolved_name
-          AS resolvedName,
+          AS "resolvedName",
 
         b.address,
 
         b.building_type
-          AS buildingType,
+          AS "buildingType",
 
         b.public_facility
-          AS publicFacility,
+          AS "publicFacility",
 
         b.latitude,
 
         b.longitude,
 
         b.name_match_status
-          AS nameMatchStatus,
+          AS "nameMatchStatus",
 
         (
           SELECT
@@ -710,7 +710,7 @@ async function readBuilding(
             AND sr.deleted_at
               IS NULL
         )
-          AS requestCount
+          AS "requestCount"
 
       FROM buildings b
 
@@ -892,8 +892,9 @@ async function saveResolution(
         'OSM',
         'POLYGON_MATCH',
         ?,
-        UTC_TIMESTAMP()
+        CURRENT_TIMESTAMP
       )
+      ON CONFLICT (building_id, name) DO NOTHING
       `,
       [
         building.id,

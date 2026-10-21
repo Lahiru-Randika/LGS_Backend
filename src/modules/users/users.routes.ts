@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import type {
   RowDataPacket,
-} from 'mysql2/promise'
+} from '../../config/db'
 import { z } from 'zod'
 
 import {
@@ -411,7 +411,7 @@ router.get(
 
       /*
         FIX:
-        mysql2 execute() should receive concrete bind-value types.
+        execute() should receive concrete bind-value types.
         This query only pushes strings and numbers.
       */
       const params:

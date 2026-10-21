@@ -6,7 +6,7 @@ import type {
   PoolConnection,
   ResultSetHeader,
   RowDataPacket,
-} from 'mysql2/promise'
+} from '../../config/db'
 import { z } from 'zod'
 import { pool, withTransaction } from '../../config/db'
 import { env } from '../../config/env'
@@ -159,7 +159,7 @@ async function getVisibleRequest(code: string, user: Express.AuthUser) {
 
 async function nextRequestCode(connection: PoolConnection) {
   const year = new Date().getUTCFullYear()
-  await connection.execute('INSERT IGNORE INTO request_sequences (year, last_number) VALUES (?, 0)', [year])
+  await connection.execute('INSERT INTO request_sequences (year, last_number) VALUES (?, 0) ON CONFLICT (year) DO NOTHING', [year])
   const [rows] = await connection.execute<(RowDataPacket & { last_number: number })[]>('SELECT last_number FROM request_sequences WHERE year = ? FOR UPDATE', [year])
   const next = Number(rows[0]?.last_number ?? 0) + 1
   await connection.execute('UPDATE request_sequences SET last_number = ? WHERE year = ?', [next, year])
@@ -239,7 +239,8 @@ router.post('/', requirePermission('request.create'), upload.array('files', env.
         `INSERT INTO service_requests
           (request_code, client_request_id, type, title, description, status, priority, ward_id, building_id,
            location_type, location_label, latitude, longitude, created_by_user_id, contact_preference, version, created_at)
-         VALUES (?, ?, ?, ?, ?, 'CREATED', ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, UTC_TIMESTAMP())`,
+         VALUES (?, ?, ?, ?, ?, 'CREATED', ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+         RETURNING id`,
         [requestCode, input.clientRequestId, input.type, input.title, input.description, input.priority, wardId, buildingId,
          input.location.kind, locationLabel, latitude, longitude, req.authUser!.id, input.contactPreference],
       )
@@ -594,7 +595,7 @@ router.post('/:code/notes', asyncHandler(async (req, res) => {
   if (!current) throw notFound('Request not found.')
   if (req.authUser!.role === 'CITIZEN' && input.visibility === 'INTERNAL') throw forbidden('Citizens cannot create internal notes.')
   const [result] = await pool.execute<ResultSetHeader>(
-    `INSERT INTO request_notes (request_id, author_user_id, body, visibility, created_at) VALUES (?, ?, ?, ?, UTC_TIMESTAMP())`,
+    `INSERT INTO request_notes (request_id, author_user_id, body, visibility, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP) RETURNING id`,
     [current.id, req.authUser!.id, input.body, req.authUser!.role === 'CITIZEN' ? 'CITIZEN_VISIBLE' : input.visibility],
   )
   await writeAudit({ actorUserId: req.authUser!.id, action: 'REQUEST_NOTE_ADDED', entityType: 'REQUEST_NOTE', entityId: result.insertId, afterData: { requestCode: current.request_code, visibility: input.visibility }, ipAddress: req.ip, userAgent: req.get('user-agent'), requestId: req.requestId })

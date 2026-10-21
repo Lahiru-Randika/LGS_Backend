@@ -1,74 +1,27 @@
 import 'dotenv/config'
-
 import fs from 'node:fs'
 import path from 'node:path'
+import { Client } from 'pg'
 
-import mysql from 'mysql2/promise'
-
-const url =
-  new URL(
-    process.env.DATABASE_URL,
-  )
-
+const url = new URL(process.env.DATABASE_URL)
 let ssl
-
-if (
-  process.env.DB_SSL ===
-  'true'
-) {
-  const ca =
-    path.resolve(
-      process.cwd(),
-      process.env.DB_SSL_CA_PATH,
-    )
-
-  ssl = {
-    ca:
-      fs.readFileSync(
-        ca,
-      ),
-  }
+if (process.env.DB_SSL === 'true') {
+  const ca = path.resolve(process.cwd(), process.env.DB_SSL_CA_PATH)
+  ssl = { ca: fs.readFileSync(ca, 'utf8'), rejectUnauthorized: true }
 }
 
-const db =
-  await mysql.createConnection(
-    {
-      host:
-        url.hostname,
+const client = new Client({
+  host: url.hostname,
+  port: Number(url.port) || 5432,
+  user: decodeURIComponent(url.username),
+  password: decodeURIComponent(url.password),
+  database: url.pathname.replace(/^\//, ''),
+  ssl,
+})
 
-      port:
-        Number(
-          url.port,
-        ),
-
-      user:
-        decodeURIComponent(
-          url.username,
-        ),
-
-      password:
-        decodeURIComponent(
-          url.password,
-        ),
-
-      database:
-        url.pathname.slice(
-          1,
-        ),
-
-      ssl,
-    },
-  )
-
-const [
-  tables,
-] =
-  await db.query(
-    'SHOW TABLES',
-  )
-
-console.table(
-  tables,
+await client.connect()
+const res = await client.query(
+  "SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() ORDER BY table_name",
 )
-
-await db.end()
+console.table(res.rows)
+await client.end()

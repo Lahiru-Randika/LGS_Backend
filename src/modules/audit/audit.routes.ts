@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import type { RowDataPacket } from 'mysql2'
+import type { RowDataPacket } from '../../config/db'
 import { z } from 'zod'
 import { pool } from '../../config/db'
 import { authenticate } from '../../middleware/authenticate'
@@ -26,10 +26,10 @@ router.get('/', asyncHandler(async (req, res) => {
   if (q.entityId) { where.push('a.entity_id = ?'); params.push(q.entityId) }
   const offset = (q.page - 1) * q.limit
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT a.id, a.action, a.entity_type AS entityType, a.entity_id AS entityId,
-            a.before_data AS beforeData, a.after_data AS afterData,
-            actor.public_id AS actorId, actor.display_name AS actorName,
-            a.ip_address AS ipAddress, a.request_id AS requestId, a.created_at AS createdAt
+    `SELECT a.id, a.action, a.entity_type AS "entityType", a.entity_id AS "entityId",
+            a.before_data AS "beforeData", a.after_data AS "afterData",
+            actor.public_id AS "actorId", actor.display_name AS "actorName",
+            a.ip_address AS "ipAddress", a.request_id AS "requestId", a.created_at AS "createdAt"
        FROM audit_logs a LEFT JOIN users actor ON actor.id = a.actor_user_id
       WHERE ${where.join(' AND ')} ORDER BY a.created_at DESC LIMIT ? OFFSET ?`,
     [...params, q.limit, offset],

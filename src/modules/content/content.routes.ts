@@ -3,7 +3,7 @@ import { Router } from 'express'
 import type {
   ResultSetHeader,
   RowDataPacket,
-} from 'mysql2/promise'
+} from '../../config/db'
 import { z } from 'zod'
 
 import { pool } from '../../config/db'
@@ -103,9 +103,9 @@ router.get(
             title,
             summary,
             status,
-            published_at AS publishedAt,
-            created_at AS createdAt,
-            updated_at AS updatedAt
+            published_at AS "publishedAt",
+            created_at AS "createdAt",
+            updated_at AS "updatedAt"
 
           FROM news_posts
 
@@ -330,7 +330,7 @@ router.patch(
 
       /*
         FIX 2:
-        Do not use unknown[] for mysql2 parameters.
+        Do not use unknown[] for execute parameters.
 
         These update values can be strings, numbers,
         Date objects or null.
@@ -680,8 +680,8 @@ router.get(
             subject,
             message,
             status,
-            created_at AS createdAt,
-            updated_at AS updatedAt
+            created_at AS "createdAt",
+            updated_at AS "updatedAt"
 
           FROM contact_messages
 

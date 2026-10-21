@@ -33,7 +33,7 @@ export const errorHandler: ErrorRequestHandler = (error, req, res, _next) => {
     })
   }
 
-  const duplicate = (error as any)?.code === 'ER_DUP_ENTRY'
+  const duplicate = (error as any)?.code === 'ER_DUP_ENTRY' || (error as any)?.code === '23505'
   if (duplicate) {
     return res.status(409).json({ success: false, error: { code: 'CONFLICT', message: 'A record with the same unique value already exists.' } })
   }

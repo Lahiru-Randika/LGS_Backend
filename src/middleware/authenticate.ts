@@ -1,5 +1,5 @@
 import type { Request, RequestHandler } from 'express'
-import type { RowDataPacket } from 'mysql2'
+import type { RowDataPacket } from '../config/db'
 import { pool } from '../config/db'
 import { env } from '../config/env'
 import { tokenHash } from '../utils/crypto'
@@ -150,7 +150,7 @@ export const authenticate: RequestHandler = async (req, _res, next) => {
          JOIN roles r ON r.id = u.role_id
         WHERE s.token_hash = ?
           AND s.revoked_at IS NULL
-          AND s.expires_at > UTC_TIMESTAMP()
+          AND s.expires_at > CURRENT_TIMESTAMP
           AND u.status = 'ACTIVE'
           AND u.deleted_at IS NULL
         LIMIT 1`,

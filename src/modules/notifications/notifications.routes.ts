@@ -2,7 +2,7 @@ import { Router } from 'express'
 import type {
   ResultSetHeader,
   RowDataPacket,
-} from 'mysql2/promise'
+} from '../../config/db'
 
 import { pool } from '../../config/db'
 import { authenticate } from '../../middleware/authenticate'
@@ -41,11 +41,11 @@ router.get(
             type,
             title,
             body,
-            entity_type AS entityType,
-            entity_id AS entityId,
+            entity_type AS "entityType",
+            entity_id AS "entityId",
             tone,
-            read_at AS readAt,
-            created_at AS createdAt
+            read_at AS "readAt",
+            created_at AS "createdAt"
 
           FROM notifications
 

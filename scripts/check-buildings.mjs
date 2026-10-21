@@ -3,83 +3,43 @@ import 'dotenv/config'
 import fs from 'node:fs'
 import path from 'node:path'
 
-import mysql from 'mysql2/promise'
+import pg from 'pg'
+
+const { Client } = pg
 
 /* =========================================================
    ENV
 ========================================================= */
 
-const databaseUrl =
-  process.env.DATABASE_URL
+const databaseUrl = process.env.DATABASE_URL
 
 if (!databaseUrl) {
-  console.error(
-    '❌ DATABASE_URL is missing from .env',
-  )
-
+  console.error('❌ DATABASE_URL is missing from .env')
   process.exit(1)
 }
 
-const url =
-  new URL(
-    databaseUrl,
-  )
+const url = new URL(databaseUrl)
 
 /* =========================================================
    SSL
-
-   Compatible with your Aiven setup:
-
-   DB_SSL=true
-   DB_SSL_CA_PATH=./certs/ca.pem
 ========================================================= */
 
-let ssl =
-  undefined
+let ssl = undefined
 
-if (
-  String(
-    process.env.DB_SSL,
-  ).toLowerCase() ===
-  'true'
-) {
-  const caPath =
-    process.env.DB_SSL_CA_PATH
+if (String(process.env.DB_SSL).toLowerCase() === 'true') {
+  const caPath = process.env.DB_SSL_CA_PATH
 
-  if (
-    caPath
-  ) {
-    const absoluteCaPath =
-      path.resolve(
-        process.cwd(),
-        caPath,
-      )
+  if (caPath) {
+    const absoluteCaPath = path.resolve(process.cwd(), caPath)
 
-    if (
-      fs.existsSync(
-        absoluteCaPath,
-      )
-    ) {
+    if (fs.existsSync(absoluteCaPath)) {
       ssl = {
-        ca:
-          fs.readFileSync(
-            absoluteCaPath,
-          ),
+        ca: fs.readFileSync(absoluteCaPath),
+        rejectUnauthorized: true,
       }
-
-      console.log(
-        `🔐 Using SSL CA: ${absoluteCaPath}`,
-      )
+      console.log(`🔐 Using SSL CA: ${absoluteCaPath}`)
     } else {
-      console.warn(
-        `⚠️ SSL CA file not found: ${absoluteCaPath}`,
-      )
-
-      /*
-        Do NOT disable certificate verification here.
-
-        Better to fix the path if Aiven requires the CA.
-      */
+      console.warn(`⚠️ SSL CA file not found: ${absoluteCaPath}`)
     }
   }
 }
@@ -89,31 +49,11 @@ if (
 ========================================================= */
 
 const config = {
-  host:
-    url.hostname,
-
-  port:
-    Number(
-      url.port ||
-        3306,
-    ),
-
-  user:
-    decodeURIComponent(
-      url.username,
-    ),
-
-  password:
-    decodeURIComponent(
-      url.password,
-    ),
-
-  database:
-    url.pathname.replace(
-      /^\//,
-      '',
-    ),
-
+  host: url.hostname,
+  port: Number(url.port || 5432),
+  user: decodeURIComponent(url.username),
+  password: decodeURIComponent(url.password),
+  database: url.pathname.replace(/^\//, ''),
   ssl,
 }
 
@@ -121,54 +61,21 @@ const config = {
    HELPERS
 ========================================================= */
 
-function section(
-  title,
-) {
-  console.log(
-    '\n============================================================',
-  )
-
-  console.log(
-    title,
-  )
-
-  console.log(
-    '============================================================',
-  )
+function section(title) {
+  console.log('\n============================================================')
+  console.log(title)
+  console.log('============================================================')
 }
 
-async function safeQuery(
-  connection,
-  title,
-  sql,
-  params = [],
-) {
-  section(
-    title,
-  )
+async function safeQuery(client, title, sql, params = []) {
+  section(title)
 
   try {
-    const [
-      rows,
-    ] =
-      await connection.execute(
-        sql,
-        params,
-      )
-
-    console.table(
-      rows,
-    )
-
-    return rows
-  } catch (
-    error
-  ) {
-    console.error(
-      '❌ Query failed:',
-      error.message,
-    )
-
+    const res = await client.query(sql, params)
+    console.table(res.rows)
+    return res.rows
+  } catch (error) {
+    console.error('❌ Query failed:', error.message)
     return []
   }
 }
@@ -178,58 +85,33 @@ async function safeQuery(
 ========================================================= */
 
 async function main() {
-  let connection
+  let client
 
   try {
-    section(
-      'CONNECTING TO AIVEN MYSQL',
-    )
+    section('CONNECTING TO POSTGRESQL')
 
-    console.log(
-      'Host:',
-      config.host,
-    )
+    console.log('Host:', config.host)
+    console.log('Port:', config.port)
+    console.log('Database:', config.database)
+    console.log('User:', config.user)
 
-    console.log(
-      'Port:',
-      config.port,
-    )
+    client = new Client(config)
+    await client.connect()
 
-    console.log(
-      'Database:',
-      config.database,
-    )
-
-    console.log(
-      'User:',
-      config.user,
-    )
-
-    /*
-      Password intentionally not printed.
-    */
-
-    connection =
-      await mysql.createConnection(
-        config,
-      )
-
-    console.log(
-      '\n✅ Connected successfully.',
-    )
+    console.log('\n✅ Connected successfully.')
 
     /* =====================================================
        DATABASE INFO
     ===================================================== */
 
     await safeQuery(
-      connection,
+      client,
       'DATABASE CONNECTION INFO',
       `
         SELECT
-          DATABASE() AS currentDatabase,
-          UTC_TIMESTAMP() AS databaseTime,
-          VERSION() AS mysqlVersion
+          current_database() AS "currentDatabase",
+          CURRENT_TIMESTAMP AS "databaseTime",
+          version() AS "postgresVersion"
       `,
     )
 
@@ -238,11 +120,13 @@ async function main() {
     ===================================================== */
 
     await safeQuery(
-      connection,
+      client,
       'BUILDINGS TABLE COLUMNS',
       `
-        SHOW COLUMNS
-        FROM buildings
+        SELECT column_name, data_type, is_nullable
+        FROM information_schema.columns
+        WHERE table_name = 'buildings'
+        ORDER BY ordinal_position
       `,
     )
 
@@ -251,11 +135,11 @@ async function main() {
     ===================================================== */
 
     await safeQuery(
-      connection,
+      client,
       'TOTAL BUILDINGS',
       `
         SELECT
-          COUNT(*) AS totalBuildings
+          COUNT(*) AS "totalBuildings"
         FROM buildings
         WHERE deleted_at IS NULL
       `,
@@ -266,34 +150,15 @@ async function main() {
     ===================================================== */
 
     await safeQuery(
-      connection,
+      client,
       'BUILDINGS WITH COORDINATES',
       `
         SELECT
-          COUNT(*) AS totalBuildings,
-
-          SUM(
-            CASE
-              WHEN latitude IS NOT NULL
-               AND longitude IS NOT NULL
-              THEN 1
-              ELSE 0
-            END
-          ) AS withCoordinates,
-
-          SUM(
-            CASE
-              WHEN latitude IS NULL
-                OR longitude IS NULL
-              THEN 1
-              ELSE 0
-            END
-          ) AS withoutCoordinates
-
+          COUNT(*) AS "totalBuildings",
+          COUNT(*) FILTER (WHERE latitude IS NOT NULL AND longitude IS NOT NULL) AS "withCoordinates",
+          COUNT(*) FILTER (WHERE latitude IS NULL OR longitude IS NULL) AS "withoutCoordinates"
         FROM buildings
-
-        WHERE
-          deleted_at IS NULL
+        WHERE deleted_at IS NULL
       `,
     )
 
@@ -302,7 +167,7 @@ async function main() {
     ===================================================== */
 
     await safeQuery(
-      connection,
+      client,
       'SAMPLE BUILDINGS',
       `
         SELECT
@@ -315,46 +180,24 @@ async function main() {
           latitude,
           longitude,
           name_match_status
-
         FROM buildings
-
-        WHERE
-          deleted_at IS NULL
-
+        WHERE deleted_at IS NULL
         ORDER BY id
-
         LIMIT 20
       `,
     )
 
     /* =====================================================
        SEARCH
-
-       Usage:
-
-       node scripts/check-buildings.mjs nelum
-
-       node scripts/check-buildings.mjs town
-
-       node scripts/check-buildings.mjs "nelum pokuna"
     ===================================================== */
 
     const searchTerm =
-      process.argv
-        .slice(
-          2,
-        )
-        .join(
-          ' ',
-        )
-        .trim() ||
-      'nelum'
+      process.argv.slice(2).join(' ').trim() || 'nelum'
 
-    const like =
-      `%${searchTerm}%`
+    const like = `%${searchTerm}%`
 
     await safeQuery(
-      connection,
+      client,
       `SEARCH BUILDINGS FOR "${searchTerm}"`,
       `
         SELECT
@@ -367,46 +210,25 @@ async function main() {
           b.latitude,
           b.longitude,
           b.name_match_status
-
         FROM buildings b
-
         WHERE
           b.deleted_at IS NULL
-
           AND (
-            b.building_code LIKE ?
-
-            OR b.external_feature_id LIKE ?
-
-            OR b.name LIKE ?
-
-            OR b.resolved_name LIKE ?
-
-            OR b.address LIKE ?
-
+            b.building_code LIKE $1
+            OR b.external_feature_id LIKE $2
+            OR b.name LIKE $3
+            OR b.resolved_name LIKE $4
+            OR b.address LIKE $5
             OR EXISTS (
               SELECT 1
-
               FROM building_aliases ba
-
-              WHERE
-                ba.building_id =
-                  b.id
-
-                AND ba.name LIKE ?
+              WHERE ba.building_id = b.id
+                AND ba.name LIKE $6
             )
           )
-
         LIMIT 50
       `,
-      [
-        like,
-        like,
-        like,
-        like,
-        like,
-        like,
-      ],
+      [like, like, like, like, like, like],
     )
 
     /* =====================================================
@@ -414,7 +236,7 @@ async function main() {
     ===================================================== */
 
     await safeQuery(
-      connection,
+      client,
       'SAMPLE BUILDING ALIASES',
       `
         SELECT
@@ -425,16 +247,9 @@ async function main() {
           ba.source,
           ba.confidence,
           ba.is_primary
-
         FROM building_aliases ba
-
-        JOIN buildings b
-          ON b.id =
-             ba.building_id
-
-        ORDER BY
-          ba.id DESC
-
+        JOIN buildings b ON b.id = ba.building_id
+        ORDER BY ba.id DESC
         LIMIT 30
       `,
     )
@@ -444,81 +259,31 @@ async function main() {
     ===================================================== */
 
     await safeQuery(
-      connection,
+      client,
       'BUILDING NAME RESOLUTION STATUS',
       `
         SELECT
           COUNT(*) AS total,
-
-          SUM(
-            CASE
-              WHEN name IS NOT NULL
-               AND TRIM(name) <> ''
-              THEN 1
-              ELSE 0
-            END
-          ) AS withNativeName,
-
-          SUM(
-            CASE
-              WHEN resolved_name IS NOT NULL
-               AND TRIM(resolved_name) <> ''
-              THEN 1
-              ELSE 0
-            END
-          ) AS withResolvedName,
-
-          SUM(
-            CASE
-              WHEN (
-                name IS NULL
-                OR TRIM(name) = ''
-              )
-              AND (
-                resolved_name IS NULL
-                OR TRIM(resolved_name) = ''
-              )
-              THEN 1
-              ELSE 0
-            END
-          ) AS withoutAnyName
-
+          COUNT(*) FILTER (WHERE name IS NOT NULL AND TRIM(name) <> '') AS "withNativeName",
+          COUNT(*) FILTER (WHERE resolved_name IS NOT NULL AND TRIM(resolved_name) <> '') AS "withResolvedName",
+          COUNT(*) FILTER (
+            WHERE (name IS NULL OR TRIM(name) = '')
+              AND (resolved_name IS NULL OR TRIM(resolved_name) = '')
+          ) AS "withoutAnyName"
         FROM buildings
-
-        WHERE
-          deleted_at IS NULL
+        WHERE deleted_at IS NULL
       `,
     )
 
-    section(
-      'FINISHED',
-    )
-
-    console.log(
-      '✅ Building database diagnostics completed.',
-    )
-  } catch (
-    error
-  ) {
-    console.error(
-      '\n❌ DATABASE CONNECTION FAILED',
-    )
-
-    console.error(
-      error,
-    )
-
-    process.exitCode =
-      1
+    section('FINISHED')
+    console.log('✅ Building database diagnostics completed.')
+  } catch (error) {
+    console.error('\n❌ DATABASE CONNECTION FAILED', error)
+    process.exitCode = 1
   } finally {
-    if (
-      connection
-    ) {
-      await connection.end()
-
-      console.log(
-        '\n🔌 Database connection closed.',
-      )
+    if (client) {
+      await client.end()
+      console.log('\n🔌 Database connection closed.')
     }
   }
 }

@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { Router } from 'express'
-import type { RowDataPacket } from 'mysql2/promise'
+import type { RowDataPacket } from '../../config/db'
 import { z } from 'zod'
 
 import { pool, withTransaction } from '../../config/db'
@@ -57,9 +57,6 @@ router.get(
 
     const where: string[] = ['1=1']
 
-    // FIX 1:
-    // mysql2 cannot safely accept unknown[] as execute parameters.
-    // These query parameters are only strings/numbers.
     const params: Array<string | number> = []
 
     if (q.status) {
@@ -80,18 +77,18 @@ router.get(
       `SELECT
          a.public_id AS id,
          a.status,
-         a.approval_type AS approvalType,
-         a.requested_action AS requestedAction,
+         a.approval_type AS "approvalType",
+         a.requested_action AS "requestedAction",
          a.justification,
-         a.due_at AS dueAt,
-         a.created_at AS createdAt,
-         a.decided_at AS decidedAt,
-         sr.request_code AS requestCode,
-         sr.title AS requestTitle,
+         a.due_at AS "dueAt",
+         a.created_at AS "createdAt",
+         a.decided_at AS "decidedAt",
+         sr.request_code AS "requestCode",
+         sr.title AS "requestTitle",
          sr.priority,
-         submitter.display_name AS submittedBy,
-         assignee.public_id AS assignedToId,
-         assignee.display_name AS assignedToName
+         submitter.display_name AS "submittedBy",
+         assignee.public_id AS "assignedToId",
+         assignee.display_name AS "assignedToName"
        FROM approval_requests a
        JOIN service_requests sr
          ON sr.id = a.request_id

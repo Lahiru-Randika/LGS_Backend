@@ -3,45 +3,22 @@ import 'dotenv/config'
 import fs from 'node:fs'
 import path from 'node:path'
 
-import mysql from 'mysql2/promise'
+import pg from 'pg'
 
-const databaseUrl =
-  process.env.DATABASE_URL
+const { Client } = pg
 
-if (
-  !databaseUrl
-) {
-  throw new Error(
-    'DATABASE_URL is missing.',
-  )
+const databaseUrl = process.env.DATABASE_URL
+
+if (!databaseUrl) {
+  throw new Error('DATABASE_URL is missing.')
 }
 
-const latitude =
-  Number(
-    process.argv[2],
-  )
+const latitude = Number(process.argv[2])
+const longitude = Number(process.argv[3])
+const radius = Number(process.argv[4] || 250)
 
-const longitude =
-  Number(
-    process.argv[3],
-  )
-
-const radius =
-  Number(
-    process.argv[4] ||
-      250,
-  )
-
-if (
-  !Number.isFinite(
-    latitude,
-  ) ||
-  !Number.isFinite(
-    longitude,
-  )
-) {
-  console.error(
-    `
+if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+  console.error(`
 Usage:
 
 node scripts/find-nearby-building.mjs <latitude> <longitude> [radiusMeters]
@@ -49,96 +26,43 @@ node scripts/find-nearby-building.mjs <latitude> <longitude> [radiusMeters]
 Example:
 
 node scripts/find-nearby-building.mjs 6.91025 79.86140 250
-`,
-  )
-
-  process.exit(
-    1,
-  )
+`)
+  process.exit(1)
 }
 
-const url =
-  new URL(
-    databaseUrl,
-  )
+const url = new URL(databaseUrl)
 
-let ssl =
-  undefined
+let ssl = undefined
 
-if (
-  String(
-    process.env.DB_SSL,
-  ).toLowerCase() ===
-  'true'
-) {
-  const caPath =
-    process.env.DB_SSL_CA_PATH
-
-  if (
-    caPath
-  ) {
-    const absolute =
-      path.resolve(
-        process.cwd(),
-        caPath,
-      )
-
-    if (
-      fs.existsSync(
-        absolute,
-      )
-    ) {
+if (String(process.env.DB_SSL).toLowerCase() === 'true') {
+  const caPath = process.env.DB_SSL_CA_PATH
+  if (caPath) {
+    const absolute = path.resolve(process.cwd(), caPath)
+    if (fs.existsSync(absolute)) {
       ssl = {
-        ca:
-          fs.readFileSync(
-            absolute,
-          ),
+        ca: fs.readFileSync(absolute),
+        rejectUnauthorized: true,
       }
     }
   }
 }
 
-const connection =
-  await mysql.createConnection(
-    {
-      host:
-        url.hostname,
+const client = new Client({
+  host: url.hostname,
+  port: Number(url.port || 5432),
+  user: decodeURIComponent(url.username),
+  password: decodeURIComponent(url.password),
+  database: url.pathname.replace(/^\//, ''),
+  ssl,
+})
 
-      port:
-        Number(
-          url.port ||
-            3306,
-        ),
+await client.connect()
 
-      user:
-        decodeURIComponent(
-          url.username,
-        ),
+console.log(`\nSearching within ${radius} m of ${latitude}, ${longitude}\n`)
 
-      password:
-        decodeURIComponent(
-          url.password,
-        ),
-
-      database:
-        url.pathname.replace(
-          /^\//,
-          '',
-        ),
-
-      ssl,
-    },
-  )
-
-console.log(
-  `\nSearching within ${radius} m of ${latitude}, ${longitude}\n`,
-)
-
-const [
-  rows,
-] =
-  await connection.execute(
-    `
+const res = await client.query(
+  `
+    SELECT * FROM (
       SELECT
         b.id,
         b.building_code,
@@ -148,7 +72,6 @@ const [
         b.address,
         b.latitude,
         b.longitude,
-
         (
           6371000 *
           2 *
@@ -157,67 +80,48 @@ const [
               POWER(
                 SIN(
                   RADIANS(
-                    b.latitude - ?
+                    b.latitude - $1
                   ) / 2
                 ),
                 2
               )
-
               +
-
               COS(
-                RADIANS(?)
+                RADIANS($2)
               )
-
               *
-
               COS(
                 RADIANS(
                   b.latitude
                 )
               )
-
               *
-
               POWER(
                 SIN(
                   RADIANS(
-                    b.longitude - ?
+                    b.longitude - $3
                   ) / 2
                 ),
                 2
               )
             )
           )
-        ) AS distanceMeters
-
+        ) AS "distanceMeters"
       FROM buildings b
-
       WHERE
         b.deleted_at IS NULL
-
         AND b.latitude IS NOT NULL
-
         AND b.longitude IS NOT NULL
-
-      HAVING
-        distanceMeters <= ?
-
-      ORDER BY
-        distanceMeters ASC
-
-      LIMIT 30
-    `,
-    [
-      latitude,
-      latitude,
-      longitude,
-      radius,
-    ],
-  )
-
-console.table(
-  rows,
+    ) sub
+    WHERE
+      "distanceMeters" <= $4
+    ORDER BY
+      "distanceMeters" ASC
+    LIMIT 30
+  `,
+  [latitude, latitude, longitude, radius],
 )
 
-await connection.end()
+console.table(res.rows)
+
+await client.end()

@@ -8,7 +8,7 @@ import {
   invalidateUserSessionCache,
 } from '../src/middleware/authenticate'
 import type { Request, Response } from 'express'
-import type { RowDataPacket, ResultSetHeader } from 'mysql2/promise'
+import type { RowDataPacket, ResultSetHeader } from '../src/config/db'
 
 // ANSI colors for clean test logging
 const green = (s: string) => `\x1b[32m${s}\x1b[0m`
@@ -55,7 +55,7 @@ async function runAuditTests() {
     // 1A. Create a short-lived test session in DB (expires in 2 seconds)
     await pool.execute(
       `INSERT INTO user_sessions (user_id, token_hash, expires_at, created_at)
-       VALUES (?, ?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 2 SECOND), UTC_TIMESTAMP())`,
+       VALUES (?, ?, CURRENT_TIMESTAMP + INTERVAL '2 SECOND', CURRENT_TIMESTAMP)`,
       [testUserId, testHash]
     )
 
@@ -137,9 +137,9 @@ async function runAuditTests() {
           // 2. Collision check inside row lock
           const [collisions] = await connection.execute<RowDataPacket[]>(
             `SELECT bd.id,
-                    COALESCE(bd.booking_code, CONCAT('BK-', LPAD(bd.id, 4, '0'))) AS bookingCode,
-                    TIME_FORMAT(bd.start_time, '%h:%i %p') AS startFormatted,
-                    TIME_FORMAT(bd.end_time, '%h:%i %p') AS endFormatted
+                    COALESCE(bd.booking_code, CONCAT('BK-', LPAD(bd.id::text, 4, '0'))) AS bookingCode,
+                    TO_CHAR(bd.start_time, 'HH12:MI AM') AS startFormatted,
+                    TO_CHAR(bd.end_time, 'HH12:MI AM') AS endFormatted
                FROM booking_details bd
               WHERE bd.facility_building_id = ?
                 AND bd.booking_date = ?
@@ -156,11 +156,11 @@ async function runAuditTests() {
             throw err
           }
 
-          // 3. Atomically insert into booking_details
           const [insertRes] = await connection.execute<ResultSetHeader>(
             `INSERT INTO booking_details
               (booking_code, user_id, facility_building_id, booking_date, start_time, end_time, participants, purpose, status, created_at, updated_at)
-             VALUES (NULL, ?, ?, ?, ?, ?, 1, 'Concurrency Audit Test', 'CONFIRMED', UTC_TIMESTAMP(), UTC_TIMESTAMP())`,
+             VALUES (NULL, ?, ?, ?, ?, ?, 1, 'Concurrency Audit Test', 'CONFIRMED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+             RETURNING id`,
             [testUserId, testBuildingId, date, startTime, endTime]
           )
 

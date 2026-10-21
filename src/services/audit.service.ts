@@ -1,4 +1,4 @@
-import type { PoolConnection } from 'mysql2/promise'
+import type { PoolConnection } from '../config/db'
 import { pool } from '../config/db'
 
 export async function writeAudit(input: {

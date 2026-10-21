@@ -3,7 +3,8 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 
-import mysql from 'mysql2/promise'
+import pg from 'pg'
+const { Client } = pg
 
 /* =========================================================
    COMMAND LINE
@@ -762,7 +763,7 @@ function databaseConfig() {
     port:
       Number(
         url.port ||
-          3306,
+          5432,
       ),
 
     user:
@@ -792,21 +793,19 @@ function databaseConfig() {
 async function nextBuildingNumber(
   connection,
 ) {
-  const [
-    rows,
-  ] =
-    await connection.execute(
+  const res =
+    await connection.query(
       `
       SELECT
         MAX(
           CAST(
             SUBSTRING(
-              building_code,
-              9
+              building_code
+              FROM 9
             )
-            AS UNSIGNED
+            AS INTEGER
           )
-        ) AS maxNumber
+        ) AS "maxNumber"
 
       FROM buildings
 
@@ -817,7 +816,7 @@ async function nextBuildingNumber(
 
   return (
     Number(
-      rows[0]
+      res.rows[0]
         ?.maxNumber ||
         0,
     ) +
@@ -866,12 +865,13 @@ async function syncBuildings(
   )
 
   const connection =
-    await mysql.createConnection(
+    new Client(
       config,
     )
+  await connection.connect()
 
   console.log(
-    '✅ Connected to Aiven.',
+    '✅ Connected to PostgreSQL.',
   )
 
   let inserted =
@@ -886,7 +886,7 @@ async function syncBuildings(
     )
 
   try {
-    await connection.beginTransaction()
+    await connection.query('BEGIN')
 
     for (
       let index =
@@ -900,32 +900,26 @@ async function syncBuildings(
           index
         ]
 
-      const [
-        existingRows,
-      ] =
-        await connection.execute(
+      const existingRes =
+        await connection.query(
           `
           SELECT
             id,
             building_code
-
           FROM buildings
-
           WHERE
-            external_source = ?
-            AND external_feature_id = ?
-
+            external_source = $1
+            AND external_feature_id = $2
           LIMIT 1
           `,
           [
             EXTERNAL_SOURCE,
-
             building.externalFeatureId,
           ],
         )
 
       const existing =
-        existingRows[0]
+        existingRes.rows[0]
 
       if (
         existing
@@ -936,64 +930,47 @@ async function syncBuildings(
 
           Only fill name/address/type if they are currently empty.
         */
-        await connection.execute(
+        await connection.query(
           `
           UPDATE buildings
-
           SET
             name =
               CASE
                 WHEN name IS NULL
                   OR TRIM(name) = ''
-                THEN ?
+                THEN $1
                 ELSE name
               END,
-
             address =
               CASE
                 WHEN address IS NULL
                   OR TRIM(address) = ''
-                THEN ?
+                THEN $2
                 ELSE address
               END,
-
             building_type =
               CASE
                 WHEN building_type IS NULL
                   OR TRIM(building_type) = ''
-                THEN ?
+                THEN $3
                 ELSE building_type
               END,
-
-            latitude = ?,
-
-            longitude = ?,
-
-            geometry_json = ?,
-
-            active = 1,
-
+            latitude = $4,
+            longitude = $5,
+            geometry_json = $6,
+            active = true,
             deleted_at = NULL,
-
-            updated_at =
-              UTC_TIMESTAMP()
-
+            updated_at = CURRENT_TIMESTAMP
           WHERE
-            id = ?
+            id = $7
           `,
           [
             building.name,
-
             building.address,
-
             building.buildingType,
-
             building.latitude,
-
             building.longitude,
-
             building.geometryJson,
-
             existing.id,
           ],
         )
@@ -1007,80 +984,54 @@ async function syncBuildings(
 
         nextNumber++
 
-        await connection.execute(
+        await connection.query(
           `
           INSERT INTO buildings (
             building_code,
             external_source,
             external_feature_id,
-
             name,
             resolved_name,
             address,
             building_type,
-
             public_facility,
-
             latitude,
             longitude,
-
             geometry_json,
-
             name_match_status,
-
             active,
-
             created_at,
             updated_at
           )
-
           VALUES (
-            ?,
-            ?,
-            ?,
-
-            ?,
+            $1,
+            $2,
+            $3,
+            $4,
             NULL,
-            ?,
-            ?,
-
+            $5,
+            $6,
             0,
-
-            ?,
-            ?,
-
-            ?,
-
-            ?,
-
-            1,
-
-            UTC_TIMESTAMP(),
-            UTC_TIMESTAMP()
+            $7,
+            $8,
+            $9,
+            $10,
+            true,
+            CURRENT_TIMESTAMP,
+            CURRENT_TIMESTAMP
           )
           `,
           [
             code,
-
             EXTERNAL_SOURCE,
-
             building.externalFeatureId,
-
             building.name,
-
             building.address,
-
             building.buildingType,
-
             building.latitude,
-
             building.longitude,
-
             building.geometryJson,
-
-            building.name
-              ? 'NATIVE_CMC'
-              : null,
+            building.name ? 'NATIVE_CMC' : null,
           ],
         )
 
@@ -1101,7 +1052,7 @@ async function syncBuildings(
       }
     }
 
-    await connection.commit()
+    await connection.query('COMMIT')
 
     section(
       'SYNC COMPLETE',
@@ -1124,7 +1075,7 @@ async function syncBuildings(
   } catch (
     error
   ) {
-    await connection.rollback()
+    await connection.query('ROLLBACK')
 
     console.error(
       '\n❌ Sync failed. Transaction rolled back.',
