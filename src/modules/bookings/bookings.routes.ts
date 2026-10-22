@@ -553,8 +553,8 @@ router.post(
       const [facRows] = await connection.execute<RowDataPacket[]>(
         `SELECT b.id, COALESCE(b.resolved_name, b.name) AS name, p.capacity, p.bookable, p.active
            FROM buildings b
-           LEFT JOIN public_facility_profiles p ON p.building_id = b.id
-          WHERE b.id = ? AND b.deleted_at IS NULL LIMIT 1 FOR UPDATE`,
+           JOIN public_facility_profiles p ON p.building_id = b.id
+          WHERE b.id = ? AND b.deleted_at IS NULL LIMIT 1 FOR UPDATE OF b, p`,
         [facilityId],
       )
 
@@ -580,7 +580,7 @@ router.post(
             AND bd.booking_date = ?::DATE
             AND bd.status NOT IN ('CANCELLED', 'REJECTED')
             AND (bd.start_time IS NULL OR bd.end_time IS NULL OR (bd.start_time < ?::TIME AND bd.end_time > ?::TIME))
-          FOR UPDATE`,
+          FOR UPDATE OF bd`,
         [facilityId, input.date, eTime, sTime],
       )
 

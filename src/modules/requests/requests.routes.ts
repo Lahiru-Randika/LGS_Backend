@@ -364,12 +364,12 @@ router.get('/', asyncHandler(async (req, res) => {
                 LEFT JOIN wards w ON w.id = sr.ward_id
                 LEFT JOIN buildings b ON b.id = sr.building_id`
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT sr.request_code AS requestCode, sr.type, sr.title, sr.status, sr.priority,
-            sr.location_label AS locationLabel, sr.latitude, sr.longitude, sr.version,
-            sr.created_at AS createdAt, sr.updated_at AS updatedAt,
-            d.name AS departmentName, w.name AS wardName,
-            b.building_code AS buildingCode, COALESCE(b.resolved_name, b.name) AS buildingName,
-            assignee.public_id AS assignedToId, assignee.display_name AS assignedToName
+    `SELECT sr.request_code AS "requestCode", sr.type, sr.title, sr.status, sr.priority,
+            sr.location_label AS "locationLabel", sr.latitude, sr.longitude, sr.version,
+            sr.created_at AS "createdAt", sr.updated_at AS "updatedAt",
+            d.name AS "departmentName", w.name AS "wardName",
+            b.building_code AS "buildingCode", COALESCE(b.resolved_name, b.name) AS "buildingName",
+            assignee.public_id AS "assignedToId", assignee.display_name AS "assignedToName"
        FROM service_requests sr ${join}
       WHERE ${where.join(' AND ')}
       ORDER BY sr.created_at DESC LIMIT ? OFFSET ?`,
@@ -397,13 +397,13 @@ router.get('/:code', asyncHandler(async (req, res) => {
   const connection = await pool.getConnection()
   try {
     const [details] = await connection.execute<RowDataPacket[]>(
-      `SELECT sr.request_code AS requestCode, sr.type, sr.title, sr.description, sr.status, sr.priority,
-              sr.location_type AS locationType, sr.location_label AS locationLabel, sr.latitude, sr.longitude,
-              sr.contact_preference AS contactPreference, sr.version, sr.created_at AS createdAt, sr.updated_at AS updatedAt,
-              d.id AS departmentId, d.name AS departmentName, w.id AS wardId, w.name AS wardName,
-              b.building_code AS buildingCode, COALESCE(b.resolved_name, b.name) AS buildingName, b.address AS buildingAddress,
-              creator.public_id AS createdById, creator.display_name AS createdByName,
-              assignee.public_id AS assignedToId, assignee.display_name AS assignedToName
+      `SELECT sr.request_code AS "requestCode", sr.type, sr.title, sr.description, sr.status, sr.priority,
+              sr.location_type AS "locationType", sr.location_label AS "locationLabel", sr.latitude, sr.longitude,
+              sr.contact_preference AS "contactPreference", sr.version, sr.created_at AS "createdAt", sr.updated_at AS "updatedAt",
+              d.id AS "departmentId", d.name AS "departmentName", w.id AS "wardId", w.name AS "wardName",
+              b.building_code AS "buildingCode", COALESCE(b.resolved_name, b.name) AS "buildingName", b.address AS "buildingAddress",
+              creator.public_id AS "createdById", creator.display_name AS "createdByName",
+              assignee.public_id AS "assignedToId", assignee.display_name AS "assignedToName"
          FROM service_requests sr
          LEFT JOIN departments d ON d.id = sr.department_id
          LEFT JOIN wards w ON w.id = sr.ward_id
@@ -414,40 +414,40 @@ router.get('/:code', asyncHandler(async (req, res) => {
       [request.id],
     )
     const [history] = await connection.execute<RowDataPacket[]>(
-      `SELECT h.from_status AS fromStatus, h.to_status AS toStatus, h.label, h.note,
-              u.display_name AS changedBy, h.created_at AS createdAt
+      `SELECT h.from_status AS "fromStatus", h.to_status AS "toStatus", h.label, h.note,
+              u.display_name AS "changedBy", h.created_at AS "createdAt"
          FROM request_status_history h JOIN users u ON u.id = h.changed_by_user_id
         WHERE h.request_id = ? ORDER BY h.created_at`,
       [request.id],
     )
     const [notes] = await connection.execute<RowDataPacket[]>(
-      `SELECT n.id, n.body, n.visibility, u.display_name AS author, n.created_at AS createdAt
+      `SELECT n.id, n.body, n.visibility, u.display_name AS author, n.created_at AS "createdAt"
          FROM request_notes n JOIN users u ON u.id = n.author_user_id
         WHERE n.request_id = ? ${visibilityClause} ORDER BY n.created_at`,
       [request.id],
     )
     const [attachments] = await connection.execute<RowDataPacket[]>(
-      `SELECT a.public_id AS id, a.category, a.original_filename AS filename, a.mime_type AS mimeType,
-              a.file_size AS fileSize, a.visibility, a.created_at AS createdAt
+      `SELECT a.public_id AS id, a.category, a.original_filename AS filename, a.mime_type AS "mimeType",
+              a.file_size AS "fileSize", a.visibility, a.created_at AS "createdAt"
          FROM request_attachments a WHERE a.request_id = ? AND a.deleted_at IS NULL ${attachmentVisibility}
         ORDER BY a.created_at`,
       [request.id],
     )
     const [inspection] = await connection.execute<RowDataPacket[]>(
-      `SELECT i.public_id AS id, i.status, i.scheduled_for AS scheduledFor, i.started_at AS startedAt,
-              i.completed_at AS completedAt, i.summary, u.display_name AS officerName
+      `SELECT i.public_id AS id, i.status, i.scheduled_for AS "scheduledFor", i.started_at AS "startedAt",
+              i.completed_at AS "completedAt", i.summary, u.display_name AS "officerName"
          FROM inspections i JOIN users u ON u.id = i.officer_user_id
         WHERE i.request_id = ? ORDER BY i.created_at DESC LIMIT 1`,
       [request.id],
     )
     const [approval] = await connection.execute<RowDataPacket[]>(
-      `SELECT a.public_id AS id, a.approval_type AS approvalType, a.requested_action AS requestedAction,
-              a.justification, a.status, a.due_at AS dueAt, a.created_at AS createdAt, a.decided_at AS decidedAt
+      `SELECT a.public_id AS id, a.approval_type AS "approvalType", a.requested_action AS "requestedAction",
+              a.justification, a.status, a.due_at AS "dueAt", a.created_at AS "createdAt", a.decided_at AS "decidedAt"
          FROM approval_requests a WHERE a.request_id = ? ORDER BY a.created_at DESC LIMIT 1`,
       [request.id],
     )
     const [booking] = await connection.execute<RowDataPacket[]>(
-      `SELECT booking_date AS date, start_time AS startTime, end_time AS endTime, participants, purpose, status
+      `SELECT booking_date AS date, start_time AS "startTime", end_time AS "endTime", participants, purpose, status
          FROM booking_details WHERE request_id = ? LIMIT 1`,
       [request.id],
     )
