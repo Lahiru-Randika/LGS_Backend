@@ -1,3 +1,4 @@
+import path from 'node:path'
 import express from 'express'
 import compression from 'compression'
 import cookieParser from 'cookie-parser'
@@ -127,6 +128,14 @@ app.use(
 )
 
 app.use(
+  '/uploads',
+  express.static(path.resolve(env.UPLOAD_DIR), {
+    maxAge: '1d',
+    etag: true,
+  }),
+)
+
+app.use(
   compression({
     threshold: 1024, // Compress responses larger than 1KB
   }),
@@ -245,6 +254,11 @@ api.use(
 )
 
 api.use(
+  '/public',
+  publicRoutes,
+)
+
+api.use(
   '/users',
   userRoutes,
 )
@@ -300,11 +314,6 @@ api.use(
 api.use(
   '/dashboard',
   dashboardRoutes,
-)
-
-api.use(
-  '/public',
-  publicRoutes,
 )
 
 api.use(

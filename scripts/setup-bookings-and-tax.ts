@@ -177,6 +177,7 @@ async function main() {
         openingTime: '08:00:00',
         closingTime: '21:00:00',
         description: 'Multi-purpose air-conditioned community hall for meetings, civic events, and cultural ceremonies.',
+        imageUrl: '/uploads/facilities/community-hall.jpg',
       },
       {
         code: 'LGS-FAC-000002',
@@ -188,6 +189,7 @@ async function main() {
         openingTime: '06:00:00',
         closingTime: '20:00:00',
         description: 'Natural turf sports ground suitable for football, cricket, and athletics training.',
+        imageUrl: '/uploads/facilities/sports-ground.jpg',
       },
       {
         code: 'LGS-FAC-000003',
@@ -199,6 +201,7 @@ async function main() {
         openingTime: '08:30:00',
         closingTime: '20:00:00',
         description: 'Historic auditorium equipped with audio-visual equipment for public conferences.',
+        imageUrl: '/uploads/facilities/town-hall-auditorium.jpg',
       },
       {
         code: 'LGS-FAC-000004',
@@ -210,6 +213,7 @@ async function main() {
         openingTime: '08:00:00',
         closingTime: '18:00:00',
         description: 'Air-conditioned meeting room for resident associations and civic consultations.',
+        imageUrl: '/uploads/facilities/meeting-room.jpg',
       },
     ]
 
@@ -235,17 +239,18 @@ async function main() {
 
       if (buildingId) {
         await client.query(
-          `INSERT INTO public_facility_profiles (building_id, bookable, capacity, opening_time, closing_time, booking_requires_approval, advance_booking_days, minimum_notice_hours, description, active, created_at, updated_at)
-           VALUES ($1, TRUE, $2, $3, $4, FALSE, 30, 24, $5, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          `INSERT INTO public_facility_profiles (building_id, bookable, capacity, opening_time, closing_time, booking_requires_approval, advance_booking_days, minimum_notice_hours, description, image_url, active, created_at, updated_at)
+           VALUES ($1, TRUE, $2, $3, $4, FALSE, 30, 24, $5, $6, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
            ON CONFLICT (building_id) DO UPDATE 
              SET bookable = TRUE,
                  capacity = EXCLUDED.capacity,
                  opening_time = EXCLUDED.opening_time,
                  closing_time = EXCLUDED.closing_time,
                  description = EXCLUDED.description,
+                 image_url = EXCLUDED.image_url,
                  active = TRUE,
                  updated_at = CURRENT_TIMESTAMP`,
-          [buildingId, fac.capacity, fac.openingTime, fac.closingTime, fac.description],
+          [buildingId, fac.capacity, fac.openingTime, fac.closingTime, fac.description, fac.imageUrl],
         )
       }
     }
@@ -279,103 +284,8 @@ async function main() {
       const meetingRoomId = meetingRoomRes.rows[0]?.id
 
       for (const citizen of citizenUsers) {
-        console.log(`Seeding data for citizen: ${citizen.display_name} (${citizen.email}, ID: ${citizen.id})...`)
-
-        // 1. BK-2026-0024 (Public Sports Ground, 02 Oct 2026, 04:00 PM – 06:00 PM, UPCOMING)
-        if (groundId) {
-          const bookingCode = 'BK-2026-0024'
-          const existing = await client.query(
-            'SELECT id FROM booking_details WHERE booking_code = $1 LIMIT 1',
-            [bookingCode],
-          )
-          if (!existing.rows[0]) {
-            await client.query(
-              `INSERT INTO booking_details 
-                (booking_code, user_id, facility_building_id, booking_date, start_time, end_time, participants, purpose, status, created_at, updated_at)
-               VALUES ($1, $2, $3, '2026-10-02', '16:00:00', '18:00:00', 22, 'Friendly Community Football Match', 'UPCOMING', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-              [bookingCode, citizen.id, groundId],
-            )
-          } else {
-            await client.query(
-              `UPDATE booking_details 
-                  SET user_id = $1, facility_building_id = $2, status = 'UPCOMING', booking_date = '2026-10-02', start_time = '16:00:00', end_time = '18:00:00', participants = 22, purpose = 'Friendly Community Football Match'
-                WHERE id = $3`,
-              [citizen.id, groundId, existing.rows[0].id],
-            )
-          }
-        }
-
-        // 2. BK-2026-0018 (Municipal Community Hall, 18 Oct 2026, 09:00 AM – 12:00 PM, CONFIRMED)
-        if (hallId) {
-          const bookingCode = 'BK-2026-0018'
-          const existing = await client.query(
-            'SELECT id FROM booking_details WHERE booking_code = $1 LIMIT 1',
-            [bookingCode],
-          )
-          if (!existing.rows[0]) {
-            await client.query(
-              `INSERT INTO booking_details 
-                (booking_code, user_id, facility_building_id, booking_date, start_time, end_time, participants, purpose, status, created_at, updated_at)
-               VALUES ($1, $2, $3, '2026-10-18', '09:00:00', '12:00:00', 50, 'Municipal Community Hall Public Gathering', 'CONFIRMED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-              [bookingCode, citizen.id, hallId],
-            )
-          } else {
-            await client.query(
-              `UPDATE booking_details 
-                  SET user_id = $1, facility_building_id = $2, status = 'CONFIRMED', booking_date = '2026-10-18', start_time = '09:00:00', end_time = '12:00:00', participants = 50, purpose = 'Municipal Community Hall Public Gathering'
-                WHERE id = $3`,
-              [citizen.id, hallId, existing.rows[0].id],
-            )
-          }
-        }
-
-        // 3. BK-2026-0012 (Town Hall Auditorium, 05 Sep 2026, 01:00 PM – 04:00 PM, COMPLETED)
-        if (auditoriumId) {
-          const bookingCode = 'BK-2026-0012'
-          const existing = await client.query(
-            'SELECT id FROM booking_details WHERE booking_code = $1 LIMIT 1',
-            [bookingCode],
-          )
-          if (!existing.rows[0]) {
-            await client.query(
-              `INSERT INTO booking_details 
-                (booking_code, user_id, facility_building_id, booking_date, start_time, end_time, participants, purpose, status, created_at, updated_at)
-               VALUES ($1, $2, $3, '2026-09-05', '13:00:00', '16:00:00', 120, 'Cultural Programme', 'COMPLETED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-              [bookingCode, citizen.id, auditoriumId],
-            )
-          } else {
-            await client.query(
-              `UPDATE booking_details 
-                  SET user_id = $1, facility_building_id = $2, status = 'COMPLETED', booking_date = '2026-09-05', start_time = '13:00:00', end_time = '16:00:00', participants = 120, purpose = 'Cultural Programme'
-                WHERE id = $3`,
-              [citizen.id, auditoriumId, existing.rows[0].id],
-            )
-          }
-        }
-
-        // 4. BK-2026-0010 (Community Meeting Room, 28 Aug 2026, 10:00 AM – 01:00 PM, CANCELLED)
-        if (meetingRoomId) {
-          const bookingCode = 'BK-2026-0010'
-          const existing = await client.query(
-            'SELECT id FROM booking_details WHERE booking_code = $1 LIMIT 1',
-            [bookingCode],
-          )
-          if (!existing.rows[0]) {
-            await client.query(
-              `INSERT INTO booking_details 
-                (booking_code, user_id, facility_building_id, booking_date, start_time, end_time, participants, purpose, status, created_at, updated_at)
-               VALUES ($1, $2, $3, '2026-08-28', '10:00:00', '13:00:00', 15, 'Resident Association Meeting', 'CANCELLED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-              [bookingCode, citizen.id, meetingRoomId],
-            )
-          } else {
-            await client.query(
-              `UPDATE booking_details 
-                  SET user_id = $1, facility_building_id = $2, status = 'CANCELLED', booking_date = '2026-08-28', start_time = '10:00:00', end_time = '13:00:00', participants = 15, purpose = 'Resident Association Meeting'
-                WHERE id = $3`,
-              [citizen.id, meetingRoomId, existing.rows[0].id],
-            )
-          }
-        }
+        console.log(`Setting up tax data for citizen: ${citizen.display_name} (${citizen.email}, ID: ${citizen.id})...`)
+        // Skipping dummy bookings insertion: Authenticated booking flow is active and driven by real user reservations.
 
         // --- TAX: Property, Tax Account, Assessment, and Receipts
         const propCode = `PROP-COL-${citizen.id}`

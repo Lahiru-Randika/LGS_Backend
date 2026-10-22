@@ -1,10 +1,14 @@
 import crypto from 'node:crypto'
+import fs from 'node:fs/promises'
+import path from 'node:path'
 import { Router } from 'express'
 import type { ResultSetHeader, RowDataPacket } from '../../config/db'
 import { z } from 'zod'
 
 import { pool, withTransaction } from '../../config/db'
+import { env } from '../../config/env'
 import { authenticate } from '../../middleware/authenticate'
+import { upload } from '../../middleware/upload'
 import { writeAudit } from '../../services/audit.service'
 import { createNotification } from '../../services/notification.service'
 import { asyncHandler } from '../../utils/asyncHandler'
@@ -15,8 +19,10 @@ import { routeParam } from '../../utils/routeParam'
 const router = Router()
 router.use(authenticate)
 
+const PRIVILEGED_FACILITY_ROLES = ['GOV_ADMIN', 'APPROVER', 'SUPERIOR']
+
 /* =========================================================
-   LIST BOOKINGS
+   1. LIST BOOKINGS
    - Citizens see their own bookings.
    - Field Officers (GOV_WORKER) only see bookings assigned to them.
    - GOV_ADMIN, APPROVER, SUPERIOR see all municipal bookings.
@@ -60,11 +66,11 @@ router.get(
       params.push(qStatus)
     }
     if (qStartDate) {
-      where.push('bd.booking_date >= ?')
+      where.push('bd.booking_date >= ?::DATE')
       params.push(qStartDate)
     }
     if (qEndDate) {
-      where.push('bd.booking_date <= ?')
+      where.push('bd.booking_date <= ?::DATE')
       params.push(qEndDate)
     }
 
@@ -72,18 +78,19 @@ router.get(
 
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT
-         bd.id AS idNum,
+         bd.id AS "idNum",
          COALESCE(bd.booking_code, sr.request_code, CONCAT('BK-', LPAD(bd.id::text, 4, '0'))) AS id,
-         COALESCE(bd.booking_code, sr.request_code, CONCAT('BK-', LPAD(bd.id::text, 4, '0'))) AS bookingCode,
+         COALESCE(bd.booking_code, sr.request_code, CONCAT('BK-', LPAD(bd.id::text, 4, '0'))) AS "bookingCode",
          COALESCE(b.resolved_name, b.name, 'Municipal Facility') AS facility,
-         COALESCE(b.resolved_name, b.name, 'Municipal Facility') AS facilityName,
-         b.id AS facilityBuildingId,
-         b.id AS facilityId,
-         b.building_code AS facilityCode,
+         COALESCE(b.resolved_name, b.name, 'Municipal Facility') AS "facilityName",
+         b.id AS "facilityBuildingId",
+         b.id AS "facilityId",
+         b.building_code AS "facilityCode",
          COALESCE(b.address, 'Colombo Municipal Council') AS location,
+         p.image_url AS "imageUrl",
          TO_CHAR(bd.booking_date, 'DD Mon YYYY') AS date,
-         TO_CHAR(bd.booking_date, 'YYYY-MM-DD') AS dateIso,
-         bd.booking_date AS rawDate,
+         TO_CHAR(bd.booking_date, 'YYYY-MM-DD') AS "dateIso",
+         bd.booking_date AS "rawDate",
          CASE
            WHEN bd.start_time IS NOT NULL AND bd.end_time IS NOT NULL THEN
              CONCAT(TO_CHAR(bd.start_time, 'HH12:MI AM'), ' – ', TO_CHAR(bd.end_time, 'HH12:MI AM'))
@@ -92,20 +99,21 @@ router.get(
            ELSE
              'Full Day'
          END AS time,
-         TO_CHAR(bd.start_time, 'HH12:MI AM') AS startTime,
-         TO_CHAR(bd.end_time, 'HH12:MI AM') AS endTime,
-         TO_CHAR(bd.start_time, 'HH24:MI') AS rawStartTime,
-         TO_CHAR(bd.end_time, 'HH24:MI') AS rawEndTime,
+         TO_CHAR(bd.start_time, 'HH12:MI AM') AS "startTime",
+         TO_CHAR(bd.end_time, 'HH12:MI AM') AS "endTime",
+         TO_CHAR(bd.start_time, 'HH24:MI') AS "rawStartTime",
+         TO_CHAR(bd.end_time, 'HH24:MI') AS "rawEndTime",
          bd.participants,
          bd.purpose,
          COALESCE(bd.status, 'PENDING') AS status,
-         bd.created_at AS createdAt,
-         COALESCE(u.display_name, 'Citizen User') AS citizenName,
-         COALESCE(u.email, 'citizen@lgs.gov.lk') AS citizenEmail,
-         u.public_id AS citizenPublicId
+         bd.created_at AS "createdAt",
+         COALESCE(u.display_name, 'Citizen User') AS "citizenName",
+         COALESCE(u.email, 'citizen@lgs.gov.lk') AS "citizenEmail",
+         u.public_id AS "citizenPublicId"
        FROM booking_details bd
        LEFT JOIN service_requests sr ON sr.id = bd.request_id AND sr.deleted_at IS NULL
        JOIN buildings b ON b.id = bd.facility_building_id
+       LEFT JOIN public_facility_profiles p ON p.building_id = b.id
        LEFT JOIN users u ON u.id = COALESCE(bd.user_id, sr.created_by_user_id)
        ${whereClause}
        ORDER BY bd.booking_date ASC, bd.start_time ASC`,
@@ -117,7 +125,7 @@ router.get(
 )
 
 /* =========================================================
-   FACILITY AVAILABILITY
+   2. FACILITY AVAILABILITY
    GET /api/v1/bookings/availability?facilityId=X&date=YYYY-MM-DD
    Returns all reserved/locked slots to prevent overlapping bookings.
 ========================================================= */
@@ -148,18 +156,18 @@ router.get(
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT
          bd.id,
-         COALESCE(bd.booking_code, sr.request_code, CONCAT('BK-', LPAD(bd.id::text, 4, '0'))) AS bookingCode,
-         TO_CHAR(bd.start_time, 'HH24:MI') AS startTime,
-         TO_CHAR(bd.end_time, 'HH24:MI') AS endTime,
-         TO_CHAR(bd.start_time, 'HH12:MI AM') AS startTimeFormatted,
-         TO_CHAR(bd.end_time, 'HH12:MI AM') AS endTimeFormatted,
-         CONCAT(TO_CHAR(bd.start_time, 'HH12:MI AM'), ' – ', TO_CHAR(bd.end_time, 'HH12:MI AM')) AS timeFormatted,
+         COALESCE(bd.booking_code, sr.request_code, CONCAT('BK-', LPAD(bd.id::text, 4, '0'))) AS "bookingCode",
+         TO_CHAR(bd.start_time, 'HH24:MI') AS "startTime",
+         TO_CHAR(bd.end_time, 'HH24:MI') AS "endTime",
+         TO_CHAR(bd.start_time, 'HH12:MI AM') AS "startTimeFormatted",
+         TO_CHAR(bd.end_time, 'HH12:MI AM') AS "endTimeFormatted",
+         CONCAT(TO_CHAR(bd.start_time, 'HH12:MI AM'), ' – ', TO_CHAR(bd.end_time, 'HH12:MI AM')) AS "timeFormatted",
          COALESCE(bd.status, 'CONFIRMED') AS status,
          bd.purpose
        FROM booking_details bd
        LEFT JOIN service_requests sr ON sr.id = bd.request_id AND sr.deleted_at IS NULL
        WHERE bd.facility_building_id = ?
-         AND bd.booking_date = ?
+         AND bd.booking_date = ?::DATE
          AND bd.status NOT IN ('CANCELLED', 'REJECTED')
        ORDER BY bd.start_time ASC`,
       [facilityId, q.date],
@@ -174,11 +182,28 @@ router.get(
 )
 
 /* =========================================================
-   LIST BOOKABLE FACILITIES
+   3. LIST BOOKABLE FACILITIES / VENUES
+   GET /api/v1/bookings/facilities
+   - Citizens see active, bookable venues.
+   - Privileged roles (GOV_ADMIN, APPROVER, SUPERIOR) can also request includeInactive=true.
 ========================================================= */
 router.get(
   '/facilities',
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
+    const isPrivileged = PRIVILEGED_FACILITY_ROLES.includes(req.authUser?.role || '')
+    const includeInactive = isPrivileged && req.query.includeInactive === 'true'
+
+    const whereClauses = [
+      'b.public_facility IS TRUE',
+      'b.deleted_at IS NULL',
+    ]
+
+    if (!includeInactive) {
+      whereClauses.push('b.active IS TRUE')
+      whereClauses.push('p.active IS TRUE')
+      whereClauses.push('p.bookable IS TRUE')
+    }
+
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT
          b.id,
@@ -186,13 +211,20 @@ router.get(
          COALESCE(b.resolved_name, b.name) AS name,
          COALESCE(b.address, 'Colombo Municipal Council') AS address,
          p.capacity,
-         TO_CHAR(p.opening_time, 'HH12:MI AM') AS openingTime,
-         TO_CHAR(p.closing_time, 'HH12:MI AM') AS closingTime,
-         p.description
+         TO_CHAR(p.opening_time, 'HH12:MI AM') AS "openingTime",
+         TO_CHAR(p.closing_time, 'HH12:MI AM') AS "closingTime",
+         TO_CHAR(p.opening_time, 'HH24:MI') AS "rawOpeningTime",
+         TO_CHAR(p.closing_time, 'HH24:MI') AS "rawClosingTime",
+         p.description,
+         p.image_url AS "imageUrl",
+         (p.bookable IS TRUE AND p.active IS TRUE AND b.active IS TRUE) AS "isAvailable",
+         b.active AS "buildingActive",
+         p.active AS "profileActive",
+         p.bookable AS "bookable"
        FROM buildings b
-       JOIN public_facility_profiles p ON p.building_id = b.id AND p.active = 1
-       WHERE b.public_facility = 1 AND p.bookable = 1 AND b.deleted_at IS NULL
-       ORDER BY COALESCE(b.resolved_name, b.name)`,
+       JOIN public_facility_profiles p ON p.building_id = b.id
+       WHERE ${whereClauses.join(' AND ')}
+       ORDER BY b.id ASC`,
     )
 
     return ok(res, rows)
@@ -200,7 +232,259 @@ router.get(
 )
 
 /* =========================================================
-   CREATE A BOOKING (WITH COLLISION & DOUBLE BOOKING PREVENTION)
+   4. GOVERNMENT VENUE MANAGEMENT: ADD NEW FACILITY
+   POST /api/v1/bookings/facilities
+   Allowed for: GOV_ADMIN, APPROVER, SUPERIOR
+   Supports multipart/form-data for image file upload.
+========================================================= */
+const createFacilitySchema = z.object({
+  name: z.string().trim().min(3).max(255),
+  code: z.string().trim().max(50).optional(),
+  address: z.string().trim().max(500).optional(),
+  capacity: z.coerce.number().int().positive().max(100000).default(100),
+  openingTime: z.string().trim().default('08:00'),
+  closingTime: z.string().trim().default('20:00'),
+  description: z.string().trim().max(2000).optional(),
+  imageUrl: z.string().trim().optional(),
+})
+
+router.post(
+  '/facilities',
+  upload.single('image'),
+  asyncHandler(async (req, res) => {
+    if (!PRIVILEGED_FACILITY_ROLES.includes(req.authUser!.role)) {
+      throw forbidden('Only municipal administrators, approvers, and directors can add facilities.')
+    }
+
+    const input = createFacilitySchema.parse(req.body)
+
+    let finalImageUrl = input.imageUrl || '/facilities/community-hall.jpg'
+
+    // If an image file was uploaded, save it securely into the backend uploads folder
+    if (req.file) {
+      const mime = req.file.mimetype.toLowerCase()
+      let ext = 'jpg'
+      if (mime.includes('png')) ext = 'png'
+      else if (mime.includes('webp')) ext = 'webp'
+      else if (mime.includes('jpeg') || mime.includes('jpg')) ext = 'jpg'
+      else {
+        throw badRequest('Only PNG, JPG, or WEBP images are supported.')
+      }
+
+      const facilitiesDir = path.resolve(env.UPLOAD_DIR, 'facilities')
+      await fs.mkdir(facilitiesDir, { recursive: true })
+
+      const safeBase = input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'venue'
+      const filename = `${safeBase}-${Date.now()}-${crypto.randomBytes(3).toString('hex')}.${ext}`
+      const targetPath = path.join(facilitiesDir, filename)
+
+      await fs.writeFile(targetPath, req.file.buffer)
+      finalImageUrl = `/uploads/facilities/${filename}`
+    }
+
+    // Determine building code
+    let buildingCode = input.code ? input.code.toUpperCase() : ''
+    if (!buildingCode) {
+      const [maxRes] = await pool.execute<RowDataPacket[]>(
+        "SELECT MAX(id) AS max_id FROM buildings WHERE building_code LIKE 'LGS-FAC-%'",
+      )
+      const nextId = (Number(maxRes[0]?.max_id) || 0) + 1
+      buildingCode = `LGS-FAC-${String(nextId).padStart(6, '0')}`
+    }
+
+    const sOpen = input.openingTime.includes(':') && input.openingTime.length === 5 ? `${input.openingTime}:00` : input.openingTime
+    const sClose = input.closingTime.includes(':') && input.closingTime.length === 5 ? `${input.closingTime}:00` : input.closingTime
+
+    // Atomic transaction for inserting building and profile
+    const createdFacility = await withTransaction(async (connection) => {
+      // 1. Insert into buildings table
+      const [bldResult] = await connection.execute<ResultSetHeader>(
+        `INSERT INTO buildings
+          (building_code, name, resolved_name, address, building_type, public_facility, active, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'PUBLIC_FACILITY', TRUE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+         RETURNING id`,
+        [
+          buildingCode,
+          input.name,
+          input.name,
+          input.address || 'Colombo Municipal Council',
+        ],
+      )
+
+      const buildingId = bldResult.insertId
+
+      // 2. Insert into public_facility_profiles
+      await connection.execute(
+        `INSERT INTO public_facility_profiles
+          (building_id, bookable, capacity, opening_time, closing_time, booking_requires_approval, advance_booking_days, minimum_notice_hours, description, image_url, active, created_at, updated_at)
+         VALUES (?, TRUE, ?, ?::TIME, ?::TIME, FALSE, 30, 24, ?, ?, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        [
+          buildingId,
+          input.capacity,
+          sOpen,
+          sClose,
+          input.description || 'Public Municipal Venue',
+          finalImageUrl,
+        ],
+      )
+
+      return {
+        id: buildingId,
+        code: buildingCode,
+        name: input.name,
+        address: input.address || 'Colombo Municipal Council',
+        capacity: input.capacity,
+        openingTime: sOpen,
+        closingTime: sClose,
+        description: input.description,
+        imageUrl: finalImageUrl,
+        isAvailable: true,
+      }
+    })
+
+    await writeAudit({
+      actorUserId: req.authUser!.id,
+      action: 'FACILITY_CREATED',
+      entityType: 'FACILITY',
+      entityId: buildingCode,
+      afterData: createdFacility,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+      requestId: req.requestId,
+    })
+
+    return created(res, {
+      success: true,
+      facility: createdFacility,
+      message: 'Venue created and published to booking list successfully.',
+    })
+  }),
+)
+
+/* =========================================================
+   5. GOVERNMENT VENUE MANAGEMENT: REMOVE / DEACTIVATE FACILITY
+   DELETE /api/v1/bookings/facilities/:id
+   Allowed for: GOV_ADMIN, APPROVER, SUPERIOR
+========================================================= */
+router.delete(
+  '/facilities/:id',
+  asyncHandler(async (req, res) => {
+    if (!PRIVILEGED_FACILITY_ROLES.includes(req.authUser!.role)) {
+      throw forbidden('Only municipal administrators, approvers, and directors can remove facilities.')
+    }
+
+    const rawId = routeParam(req.params.id, 'id')
+
+    // Find building
+    const [bldRows] = await pool.execute<RowDataPacket[]>(
+      'SELECT id, building_code, name FROM buildings WHERE (id = ? OR building_code = ?) AND deleted_at IS NULL LIMIT 1',
+      [rawId, rawId],
+    )
+
+    const building = bldRows[0]
+    if (!building) {
+      throw notFound('Venue / facility not found.')
+    }
+
+    // Soft deactivate from bookable list
+    await pool.execute(
+      `UPDATE public_facility_profiles 
+          SET bookable = FALSE, active = FALSE, updated_at = CURRENT_TIMESTAMP 
+        WHERE building_id = ?`,
+      [building.id],
+    )
+
+    await pool.execute(
+      `UPDATE buildings 
+          SET active = FALSE, updated_at = CURRENT_TIMESTAMP 
+        WHERE id = ?`,
+      [building.id],
+    )
+
+    await writeAudit({
+      actorUserId: req.authUser!.id,
+      action: 'FACILITY_DEACTIVATED',
+      entityType: 'FACILITY',
+      entityId: building.building_code,
+      afterData: { buildingId: building.id, status: 'REMOVED_FROM_BOOKING' },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+      requestId: req.requestId,
+    })
+
+    return ok(res, {
+      success: true,
+      removed: true,
+      message: `"${building.name}" has been removed from the booking list.`,
+    })
+  }),
+)
+
+/* =========================================================
+   6. GOVERNMENT VENUE MANAGEMENT: TOGGLE ACTIVE STATUS
+   PATCH /api/v1/bookings/facilities/:id/toggle
+   Allowed for: GOV_ADMIN, APPROVER, SUPERIOR
+========================================================= */
+router.patch(
+  '/facilities/:id/toggle',
+  asyncHandler(async (req, res) => {
+    if (!PRIVILEGED_FACILITY_ROLES.includes(req.authUser!.role)) {
+      throw forbidden('Only municipal administrators, approvers, and directors can modify venues.')
+    }
+
+    const rawId = routeParam(req.params.id, 'id')
+
+    const [bldRows] = await pool.execute<RowDataPacket[]>(
+      `SELECT b.id, b.building_code, b.name, p.bookable, p.active 
+         FROM buildings b
+         JOIN public_facility_profiles p ON p.building_id = b.id
+        WHERE (b.id = ? OR b.building_code = ?) LIMIT 1`,
+      [rawId, rawId],
+    )
+
+    const building = bldRows[0]
+    if (!building) {
+      throw notFound('Venue / facility not found.')
+    }
+
+    const newActiveState = !building.active
+
+    await pool.execute(
+      `UPDATE public_facility_profiles 
+          SET bookable = ?, active = ?, updated_at = CURRENT_TIMESTAMP 
+        WHERE building_id = ?`,
+      [newActiveState, newActiveState, building.id],
+    )
+
+    await pool.execute(
+      `UPDATE buildings 
+          SET active = ?, updated_at = CURRENT_TIMESTAMP 
+        WHERE id = ?`,
+      [newActiveState, building.id],
+    )
+
+    await writeAudit({
+      actorUserId: req.authUser!.id,
+      action: 'FACILITY_STATUS_TOGGLED',
+      entityType: 'FACILITY',
+      entityId: building.building_code,
+      afterData: { buildingId: building.id, active: newActiveState },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+      requestId: req.requestId,
+    })
+
+    return ok(res, {
+      success: true,
+      active: newActiveState,
+      message: `Venue ${newActiveState ? 'activated' : 'deactivated'} successfully.`,
+    })
+  }),
+)
+
+/* =========================================================
+   7. CREATE A BOOKING (WITH TRANSACTION, ISOLATION & COLLISION PREVENTION)
+   POST /api/v1/bookings
 ========================================================= */
 const createBookingSchema = z.object({
   facilityBuildingId: z.coerce.number().int().positive().optional(),
@@ -231,7 +515,7 @@ router.post(
       const [defRows] = await pool.execute<RowDataPacket[]>(
         `SELECT b.id FROM buildings b 
          JOIN public_facility_profiles p ON p.building_id = b.id 
-         WHERE b.public_facility = 1 AND p.bookable = 1 LIMIT 1`,
+         WHERE b.public_facility IS TRUE AND p.bookable IS TRUE AND b.active IS TRUE AND p.active IS TRUE LIMIT 1`,
       )
       facilityId = defRows[0]?.id
     }
@@ -239,15 +523,6 @@ router.post(
     if (!facilityId) {
       throw badRequest('Please select a valid municipal facility.')
     }
-
-    // Verify facility
-    const [facRows] = await pool.execute<RowDataPacket[]>(
-      `SELECT b.id, COALESCE(b.resolved_name, b.name) AS name, p.capacity
-         FROM buildings b
-         LEFT JOIN public_facility_profiles p ON p.building_id = b.id
-        WHERE b.id = ? AND b.deleted_at IS NULL LIMIT 1`,
-      [facilityId],
-    )
 
     // Format start & end time
     const sTime = input.startTime.includes(':') && input.startTime.length === 5 ? `${input.startTime}:00` : input.startTime
@@ -270,13 +545,13 @@ router.post(
     }
 
     /* =========================================================
-       ATOMIC TRANSACTION WITH ROW LOCKING
-       Guarantees collision prevention under 100+ concurrent users.
+       ATOMIC TRANSACTION WITH ROW LOCKING & SERIALIZED ISOLATION
+       Guarantees collision prevention under concurrent booking attempts.
     ========================================================= */
     const { bookingCode, facility } = await withTransaction(async (connection) => {
-      // 1. Lock the facility row to serialize concurrent booking attempts
+      // 1. Lock the facility row to serialize concurrent booking attempts for this venue
       const [facRows] = await connection.execute<RowDataPacket[]>(
-        `SELECT b.id, COALESCE(b.resolved_name, b.name) AS name, p.capacity
+        `SELECT b.id, COALESCE(b.resolved_name, b.name) AS name, p.capacity, p.bookable, p.active
            FROM buildings b
            LEFT JOIN public_facility_profiles p ON p.building_id = b.id
           WHERE b.id = ? AND b.deleted_at IS NULL LIMIT 1 FOR UPDATE`,
@@ -288,19 +563,23 @@ router.post(
         throw notFound('Selected facility not found.')
       }
 
+      if (facilityRow.bookable === false || facilityRow.active === false) {
+        throw badRequest('This facility is currently not available for bookings.')
+      }
+
       // 2. Collision check inside transaction with row lock
       const [collisions] = await connection.execute<RowDataPacket[]>(
         `SELECT bd.id,
-                COALESCE(bd.booking_code, CONCAT('BK-', LPAD(bd.id::text, 4, '0'))) AS bookingCode,
-                COALESCE(b.resolved_name, b.name) AS facilityName,
-                TO_CHAR(bd.start_time, 'HH12:MI AM') AS startFormatted,
-                TO_CHAR(bd.end_time, 'HH12:MI AM') AS endFormatted
+                COALESCE(bd.booking_code, CONCAT('BK-', LPAD(bd.id::text, 4, '0'))) AS "bookingCode",
+                COALESCE(b.resolved_name, b.name) AS "facilityName",
+                TO_CHAR(bd.start_time, 'HH12:MI AM') AS "startFormatted",
+                TO_CHAR(bd.end_time, 'HH12:MI AM') AS "endFormatted"
            FROM booking_details bd
            JOIN buildings b ON b.id = bd.facility_building_id
           WHERE bd.facility_building_id = ?
-            AND bd.booking_date = ?
+            AND bd.booking_date = ?::DATE
             AND bd.status NOT IN ('CANCELLED', 'REJECTED')
-            AND (bd.start_time IS NULL OR bd.end_time IS NULL OR (bd.start_time < ? AND bd.end_time > ?))
+            AND (bd.start_time IS NULL OR bd.end_time IS NULL OR (bd.start_time < ?::TIME AND bd.end_time > ?::TIME))
           FOR UPDATE`,
         [facilityId, input.date, eTime, sTime],
       )
@@ -319,7 +598,7 @@ router.post(
       const [result] = await connection.execute<ResultSetHeader>(
         `INSERT INTO booking_details
           (booking_code, user_id, facility_building_id, booking_date, start_time, end_time, participants, purpose, status, created_at, updated_at)
-         VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, 'CONFIRMED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+         VALUES (NULL, ?, ?, ?::DATE, ?::TIME, ?::TIME, ?, ?, 'CONFIRMED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
          RETURNING id`,
         [
           req.authUser!.id,
@@ -334,7 +613,7 @@ router.post(
 
       const insertId = result.insertId
       const year = new Date().getUTCFullYear()
-      let code = `BK-${year}-${String(insertId + 20).padStart(4, '0')}`
+      let code = `BK-${year}-${String(insertId).padStart(4, '0')}`
 
       // Assign the unique booking code; retry with disambiguating suffix on duplicate key collision
       let attempts = 0
@@ -348,7 +627,7 @@ router.post(
         } catch (err: any) {
           if ((err?.code === 'ER_DUP_ENTRY' || err?.code === '23505') && attempts < 4) {
             attempts++
-            code = `BK-${year}-${String(insertId + 20 + attempts).padStart(4, '0')}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`
+            code = `BK-${year}-${String(insertId + attempts).padStart(4, '0')}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`
           } else {
             throw err
           }
@@ -403,14 +682,14 @@ router.post(
 )
 
 /* =========================================================
-   ADMIN/OFFICER: UPDATE BOOKING STATUS
+   8. ADMIN/OFFICER: UPDATE BOOKING STATUS
    PATCH /api/v1/bookings/:id/status
    Allowed for: GOV_ADMIN, APPROVER, SUPERIOR
 ========================================================= */
 router.patch(
   '/:id/status',
   asyncHandler(async (req, res) => {
-    if (!['GOV_ADMIN', 'APPROVER', 'SUPERIOR'].includes(req.authUser!.role)) {
+    if (!PRIVILEGED_FACILITY_ROLES.includes(req.authUser!.role)) {
       throw forbidden('Only municipal administrators and approvers can update booking status.')
     }
 
@@ -424,10 +703,10 @@ router.patch(
 
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT bd.id, bd.booking_code, bd.user_id, bd.status,
-              COALESCE(b.resolved_name, b.name) AS facilityName
+              COALESCE(b.resolved_name, b.name) AS "facilityName"
          FROM booking_details bd
          JOIN buildings b ON b.id = bd.facility_building_id
-        WHERE (bd.booking_code = ? OR bd.id = ?) LIMIT 1`,
+        WHERE (bd.booking_code = ? OR bd.id::text = ?) LIMIT 1`,
       [rawId, rawId],
     )
 
@@ -437,7 +716,7 @@ router.patch(
     }
 
     await pool.execute(
-      'UPDATE booking_details SET status = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?',
+      'UPDATE booking_details SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
       [input.status, booking.id],
     )
 
@@ -473,7 +752,8 @@ router.patch(
 )
 
 /* =========================================================
-   CANCEL A BOOKING
+   9. CANCEL A BOOKING
+   POST /api/v1/bookings/:id/cancel
 ========================================================= */
 router.post(
   '/:id/cancel',
@@ -483,7 +763,7 @@ router.post(
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT bd.id, bd.booking_code, bd.user_id, bd.status 
          FROM booking_details bd 
-        WHERE (bd.booking_code = ? OR bd.id = ?) LIMIT 1`,
+        WHERE (bd.booking_code = ? OR bd.id::text = ?) LIMIT 1`,
       [rawId, rawId],
     )
 
@@ -497,7 +777,7 @@ router.post(
     }
 
     await pool.execute(
-      "UPDATE booking_details SET status = 'CANCELLED', updated_at = UTC_TIMESTAMP() WHERE id = ?",
+      "UPDATE booking_details SET status = 'CANCELLED', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
       [booking.id],
     )
 

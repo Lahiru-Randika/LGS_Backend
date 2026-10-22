@@ -43,41 +43,46 @@ router.get('/buildings/:code', asyncHandler(async (req, res) => {
 router.get('/facilities', asyncHandler(async (_req, res) => {
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT b.building_code AS "buildingCode", COALESCE(b.resolved_name,b.name) AS name, b.address,
-            b.latitude, b.longitude, f.bookable, f.capacity, f.opening_time AS "openingTime",
-            f.closing_time AS "closingTime", f.description
+            b.latitude, b.longitude, f.bookable, f.capacity,
+            TO_CHAR(f.opening_time, 'HH12:MI AM') AS "openingTime",
+            TO_CHAR(f.closing_time, 'HH12:MI AM') AS "closingTime",
+            f.description, f.image_url AS "imageUrl"
        FROM buildings b
-       LEFT JOIN public_facility_profiles f ON f.building_id = b.id AND f.active = 1
-      WHERE b.public_facility = 1 AND b.active = true AND b.deleted_at IS NULL
-      ORDER BY COALESCE(b.resolved_name,b.name,b.building_code)`)
+       LEFT JOIN public_facility_profiles f ON f.building_id = b.id
+      WHERE b.public_facility IS TRUE AND b.active IS TRUE AND f.active IS TRUE AND f.bookable IS TRUE AND b.deleted_at IS NULL
+      ORDER BY b.id ASC`)
   return ok(res, rows)
 }))
 
 router.get('/facilities/:code', asyncHandler(async (req, res) => {
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT b.building_code AS "buildingCode", COALESCE(b.resolved_name,b.name) AS name, b.address,
-            b.latitude, b.longitude, f.bookable, f.capacity, f.opening_time AS "openingTime",
-            f.closing_time AS "closingTime", f.booking_requires_approval AS "bookingRequiresApproval",
-            f.advance_booking_days AS "advanceBookingDays", f.minimum_notice_hours AS "minimumNoticeHours", f.description
-       FROM buildings b LEFT JOIN public_facility_profiles f ON f.building_id = b.id AND f.active = 1
-      WHERE b.building_code = ? AND b.public_facility = 1 AND b.active = true AND b.deleted_at IS NULL LIMIT 1`, [req.params.code])
+            b.latitude, b.longitude, f.bookable, f.capacity,
+            TO_CHAR(f.opening_time, 'HH12:MI AM') AS "openingTime",
+            TO_CHAR(f.closing_time, 'HH12:MI AM') AS "closingTime",
+            f.booking_requires_approval AS "bookingRequiresApproval",
+            f.advance_booking_days AS "advanceBookingDays", f.minimum_notice_hours AS "minimumNoticeHours",
+            f.description, f.image_url AS "imageUrl"
+       FROM buildings b LEFT JOIN public_facility_profiles f ON f.building_id = b.id
+      WHERE b.building_code = ? AND b.public_facility IS TRUE AND b.active IS TRUE AND b.deleted_at IS NULL LIMIT 1`, [req.params.code])
   if (!rows[0]) throw notFound('Public facility not found.')
   return ok(res, rows[0])
 }))
 
 router.get('/facilities/:code/availability', asyncHandler(async (req, res) => {
   const q = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).parse(req.query)
-  const [buildings] = await pool.execute<(RowDataPacket & { id: number; capacity: number | null; bookable: number | null })[]>(
+  const [buildings] = await pool.execute<(RowDataPacket & { id: number; capacity: number | null; bookable: boolean | null })[]>(
     `SELECT b.id, f.capacity, f.bookable FROM buildings b
-       LEFT JOIN public_facility_profiles f ON f.building_id = b.id AND f.active = 1
-      WHERE b.building_code = ? AND b.public_facility = 1 AND b.active = true AND b.deleted_at IS NULL LIMIT 1`, [req.params.code])
+       LEFT JOIN public_facility_profiles f ON f.building_id = b.id
+      WHERE b.building_code = ? AND b.public_facility IS TRUE AND b.active IS TRUE AND b.deleted_at IS NULL LIMIT 1`, [req.params.code])
   const facility = buildings[0]
   if (!facility) throw notFound('Public facility not found.')
   const [bookings] = await pool.execute<RowDataPacket[]>(
     `SELECT bd.start_time AS "startTime", bd.end_time AS "endTime", bd.participants, bd.status, sr.request_code AS "requestCode"
-       FROM booking_details bd JOIN service_requests sr ON sr.id = bd.request_id
-      WHERE bd.facility_building_id = ? AND bd.booking_date = ? AND bd.status IN ('PENDING','APPROVED') AND sr.deleted_at IS NULL
+       FROM booking_details bd LEFT JOIN service_requests sr ON sr.id = bd.request_id
+      WHERE bd.facility_building_id = ? AND bd.booking_date = ?::DATE AND bd.status NOT IN ('CANCELLED', 'REJECTED')
       ORDER BY bd.start_time`, [facility.id, q.date])
-  return ok(res, { available: facility.bookable !== 0, capacity: facility.capacity, existingBookings: bookings })
+  return ok(res, { available: !!facility.bookable, capacity: facility.capacity, existingBookings: bookings })
 }))
 
 router.get('/news', asyncHandler(async (_req, res) => {
